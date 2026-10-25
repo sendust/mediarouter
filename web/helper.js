@@ -456,8 +456,8 @@ const EncoderHelper = {
     const code = (sel.value || "").trim();
     if (!code) return null;
     const label = sel.selectedOptions[0]?.textContent || "";
-    if (/interlaced|\d+i\d/i.test(label) || /^(Hi|ntsc|nt23|pal)/.test(code)) return true;
-    return false;
+    if (/\d+[ip]\d/.test(label)) return /interlaced|\d+i\d/.test(label);
+    return code.startsWith("Hi") || ["ntsc", "nt23", "pal"].includes(code);
   },
 
   refresh() {

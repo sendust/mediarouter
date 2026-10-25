@@ -1,0 +1,27 @@
+# /etc/systemd/system/mediarouter.service
+[Unit]
+Description=mediarouter backend (ffmpeg encoder supervisor + web UI)
+Wants=network-online.target
+After=network-online.target mediamtx.service
+
+[Service]
+Type=simple
+User=sendust
+Group=sendust
+WorkingDirectory=/home/sendust/mediarouter
+ExecStart=/home/sendust/mediarouter/.venv/bin/python -m app.main
+Environment=PYTHONUNBUFFERED=1
+# Environment=MEDIAROUTER_CONFIG=/home/sendust/mediarouter/config.json
+
+# SIGTERM goes to the backend only; it stops every ffmpeg itself (SIGINT -> SIGTERM -> SIGKILL).
+# Anything still alive after TimeoutStopSec is SIGKILLed by systemd.
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+Restart=on-failure
+RestartSec=3
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

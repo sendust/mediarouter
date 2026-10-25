@@ -41,14 +41,34 @@ def decklink_devices(ffmpeg):
     return devices
 
 
+def _std_name(width_height, rate, interlaced):
+    """'1920x1080', '30000/1001', True -> '1080i59.94' (interlaced shows the field rate)."""
+    h = width_height.split("x")[1]
+    try:
+        num, den = (int(x) for x in rate.split("/"))
+        fps = num / den * (2 if interlaced else 1)
+    except (ValueError, ZeroDivisionError):
+        return width_height
+    return f"{h}{'i' if interlaced else 'p'}{round(fps, 2):g}"
+
+
 def decklink_formats(ffmpeg, device):
-    """Formats the card reports (device must not be in use)."""
+    """Formats the card reports (device must not be in use).
+
+    ffmpeg prints them as tab separated rows under the log line, e.g.
+    '\tpal \t\t720x576 at 25000/1000 fps (interlaced, upper field first)'
+    (older builds prefix each row with '[decklink @ 0x..]'). The code is 4 chars and may end in a space.
+    """
     _, out, err = _run([ffmpeg, "-hide_banner", "-f", "decklink", "-list_formats", "1", "-i", device], timeout=15)
     fmts = []
     for line in (out + err).splitlines():
-        m = re.search(r"\]\s+(\S{3,4})\s+(\d+x\d+ at [\d/]+ fps.*)$", line)
+        m = re.search(r"(?:^|\]\s*)\t?([^\t\]]{3,4}?)\s*\t+((\d+x\d+) at ([\d/]+) fps(.*))$", line)
         if m:
-            fmts.append({"code": m.group(1), "label": m.group(2).strip()})
+            code = m.group(1).ljust(4) if len(m.group(1)) == 3 else m.group(1)
+            inter = "interlaced" in m.group(5)
+            extra = m.group(5).strip(" ()")
+            label = f"{_std_name(m.group(3), m.group(4), inter)} — {m.group(3)}" + (f", {extra}" if extra else "")
+            fmts.append({"code": code, "label": label})
     return {"formats": fmts, "raw": (out + err)[-3000:] if not fmts else ""}
 
 

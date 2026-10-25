@@ -54,6 +54,64 @@ cp config.example.json config.json   # 처음 한번 (없으면 기본값으로 
 백엔드를 종료(SIGINT/SIGTERM)하면 실행중인 인코더도 모두 정지합니다.
 다음 시작시 이전 실행에서 남은 ffmpeg (env `MEDIAROUTER_ENCODER_ID`) 를 정리하고 autostart 인코더를 실행합니다.
 
+## systemd 서비스로 실행
+
+예시 unit 파일: [`deploy/mediarouter.service`](deploy/mediarouter.service)
+
+```ini
+# /etc/systemd/system/mediarouter.service
+[Unit]
+Description=mediarouter backend (ffmpeg encoder supervisor + web UI)
+Wants=network-online.target
+After=network-online.target mediamtx.service
+
+[Service]
+Type=simple
+User=sendust
+Group=sendust
+WorkingDirectory=/home/sendust/mediarouter
+ExecStart=/home/sendust/mediarouter/.venv/bin/python -m app.main
+Environment=PYTHONUNBUFFERED=1
+# Environment=MEDIAROUTER_CONFIG=/home/sendust/mediarouter/config.json
+
+# SIGTERM goes to the backend only; it stops every ffmpeg itself (SIGINT -> SIGTERM -> SIGKILL).
+# Anything still alive after TimeoutStopSec is SIGKILLed by systemd.
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+Restart=on-failure
+RestartSec=3
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+```
+
+설치:
+
+```
+./run.sh                                  # 한번 실행해서 .venv 생성 확인 후 Ctrl+C
+sudo cp deploy/mediarouter.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now mediarouter
+```
+
+운영:
+
+```
+systemctl status mediarouter
+sudo systemctl restart mediarouter        # 실행중인 인코더는 정지 → autostart 인코더만 다시 시작
+journalctl -u mediarouter -f              # 콘솔 출력 (logs/backend.log 에도 동일하게 기록)
+```
+
+- `User`, `Group`, 경로는 설치 위치에 맞게 수정하세요. 이 사용자는 DeckLink(`/dev/blackmagic/*`), NVIDIA 장치에 접근 가능해야 합니다.
+- `KillMode=mixed` — systemd 가 ffmpeg 를 직접 죽이지 않고 백엔드가 인코더를 순서대로 정지하게 합니다.
+  `TimeoutStopSec` 는 `encoder_watchdog.stop_timeout_sec` × 2 보다 넉넉하게 두세요.
+- mediamtx 가 systemd 서비스가 아니면 `After=` 의 `mediamtx.service` 는 지워도 됩니다 (없어도 오류는 아님).
+- 서비스 등록 전에 `nohup ./run.sh` 등으로 띄운 백엔드가 있으면 먼저 종료하세요 (포트 충돌).
+- 서비스 재시작/서버 재부팅 후에도 계속 송출해야 하는 인코더는 카드에서 "백엔드 시작시 자동실행" 을 켜두세요.
+
 ## 구조
 
 | 파일 | 역할 |
@@ -72,6 +130,7 @@ cp config.example.json config.json   # 처음 한번 (없으면 기본값으로 
 | `web/helper.js` | Encoder / Monitor helper 대화창 |
 | `web/meter.js` | WebRTC 모니터, Web Audio 레벨미터, WebRTC 수신 통계 |
 | `web/reader.js` | mediamtx WHEP reader |
+| `deploy/mediarouter.service` | systemd unit 예시 |
 
 ## config.json
 
