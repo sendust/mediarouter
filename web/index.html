@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MEDIAROUTER by sendust</title>
+<link rel="stylesheet" href="/static/style.css?v=20">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">MEDIAROUTER <span class="by">by sendust</span> <span id="hostname" class="host"></span></div>
+  <div class="topstats">
+    <span>CPU <b id="top-cpu">-</b></span>
+    <span>ffmpeg <b id="top-ff">-</b></span>
+    <span>MEM free <b id="top-mem">-</b></span>
+    <span id="conn" class="badge off">offline</span>
+    <span id="clock" class="clock">-</span>
+  </div>
+</header>
+
+<div id="audio-unlock" class="audio-unlock" hidden>오디오 레벨미터를 사용하려면 화면을 한 번 클릭하세요</div>
+
+<main class="layout">
+  <section class="content">
+    <div class="section-head">
+      <h2>Encoders</h2>
+      <button id="btn-add-encoder" class="btn primary">+ Encoder</button>
+    </div>
+    <div id="encoders" class="cards encoders"></div>
+
+    <div class="section-head">
+      <h2>Monitors</h2>
+      <button id="btn-add-monitor" class="btn primary">+ Monitor</button>
+    </div>
+    <div id="monitors" class="cards monitors"></div>
+  </section>
+
+  <aside class="side">
+    <div class="panel">
+      <h3>System</h3>
+      <dl class="kv" id="sys-kv"></dl>
+      <h4>Network</h4>
+      <table class="tbl" id="sys-nics"><thead><tr><th>NIC</th><th>IP</th><th>RX</th><th>TX</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="panel">
+      <h3>mediamtx paths <span id="mtx-state" class="badge off">-</span></h3>
+      <div id="mtx-paths" class="mtx-paths"></div>
+    </div>
+  </aside>
+</main>
+
+<section class="logpanel">
+  <div class="section-head">
+    <h3>Backend log <span class="muted" id="log-count"></span></h3>
+    <div class="logtools">
+      <select id="log-level">
+        <option value="">all</option><option value="INFO">INFO+</option>
+        <option value="WARNING">WARNING+</option><option value="ERROR">ERROR</option>
+      </select>
+      <input id="log-filter" placeholder="filter">
+      <label><input type="checkbox" id="log-follow" checked> follow</label>
+    </div>
+  </div>
+  <div id="log" class="log"></div>
+</section>
+
+<!-- encoder card template -->
+<template id="tpl-encoder">
+  <article class="card enc" draggable="false">
+    <div class="card-head">
+      <span class="handle" title="drag to reorder">⠿</span>
+      <input class="title-in" data-f="title" spellcheck="false">
+      <span class="badge state">stopped</span>
+      <span class="badge slowb" hidden title="최근 구간 처리속도가 실시간보다 느림">SLOW</span>
+      <div class="spacer"></div>
+      <button class="btn run" data-a="start">Run</button>
+      <button class="btn stop" data-a="stop">Stop</button>
+      <button class="btn" data-a="restart" title="restart ffmpeg">⟳</button>
+      <button class="btn ghost" data-a="helper" title="edit with helper">✎</button>
+      <button class="btn ghost danger" data-a="delete" title="delete">✕</button>
+    </div>
+    <input class="comment-in" data-f="comment" placeholder="comment" spellcheck="false">
+    <div class="codecs" hidden></div>
+    <div class="opts">
+      <label><input type="checkbox" data-f="autostart"> 백엔드 시작시 자동실행</label>
+      <label><input type="checkbox" data-f="auto_restart"> 오류시 자동재시작</label>
+      <label title="config.json encoder_watchdog.speed_min / speed_window_sec 기준"><input type="checkbox" data-f="speed_restart"> 속도저하시 재시작</label>
+      <label><input type="checkbox" data-f="sched_enabled"> 예약 재시작</label>
+      <select data-f="sched_mode"><option value="daily">매일</option><option value="interval">주기(분)</option></select>
+      <input data-f="sched_time" type="time" class="time-in">
+      <input data-f="sched_interval" type="number" min="1" class="sm num" title="interval minutes">
+    </div>
+    <div class="stats"></div>
+    <div class="err" hidden></div>
+    <details class="cli-box">
+      <summary>ffmpeg command line <span class="dirty" hidden>● 수정됨</span></summary>
+      <div class="iconbar">
+        <button class="icon-btn" data-a="cli-copy" title="복사"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+        <button class="icon-btn" data-a="cli-paste" title="붙여넣기 (클립보드 내용으로 교체)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1M9 11h6M9 15h4"/></svg></button>
+      </div>
+      <textarea class="cli" spellcheck="false" rows="7"></textarea>
+      <div class="row">
+        <button class="btn" data-a="cli-save">저장</button>
+        <button class="btn" data-a="cli-save-restart">저장 + 재시작</button>
+        <button class="btn ghost" data-a="cli-revert">되돌리기</button>
+        <span class="muted small">저장된 CLI 는 다음 시작/재시작부터 사용됩니다. -progress, -nostats 등은 실행시 자동 추가됩니다.</span>
+      </div>
+      <details class="argv-box"><summary class="small muted">실행중인 실제 argv</summary><pre class="argv"></pre></details>
+    </details>
+    <details class="fflog-box">
+      <summary>fflog <span class="fflog-size muted"></span></summary>
+      <div class="row">
+        <button class="btn ghost" data-a="fflog-clear">로그 삭제</button>
+        <span class="muted small fflog-path"></span>
+        <span class="spacer"></span>
+        <button class="icon-btn" data-a="fflog-copy" title="표시된 로그 복사"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+      </div>
+      <pre class="fflog"></pre>
+    </details>
+  </article>
+</template>
+
+<!-- monitor card template -->
+<template id="tpl-monitor">
+  <article class="card mon">
+    <div class="card-head">
+      <span class="handle" title="drag to reorder">⠿</span>
+      <input class="title-in" data-f="title" spellcheck="false">
+      <label class="mon-en" title="끄면 WebRTC 연결과 레벨미터를 중지합니다"><input type="checkbox" data-f="enabled"> enable</label>
+      <div class="spacer"></div>
+      <button class="btn ghost" data-a="reconnect" title="reconnect">⟳</button>
+      <button class="btn ghost" data-a="edit" title="edit paths">✎</button>
+      <button class="btn ghost danger" data-a="delete" title="delete">✕</button>
+    </div>
+    <div class="mon-body">
+      <div class="video-wrap"><video muted playsinline autoplay></video><div class="video-msg">no video</div></div>
+      <div class="meters">
+        <div class="scale"></div>
+        <div class="meter-list"></div>
+      </div>
+    </div>
+    <div class="path-info"></div>
+  </article>
+</template>
+
+<!-- encoder helper -->
+<dialog id="dlg-encoder" class="dlg wide">
+  <form method="dialog" class="dlg-inner" id="helper-form">
+    <h2 id="helper-title">Encoder helper</h2>
+    <div class="caps-warn" id="caps-warn" hidden></div>
+    <div class="grid2">
+      <fieldset class="in-box">
+        <legend>입력 (input)</legend>
+        <div class="seg" id="in-type">
+          <label><input type="radio" name="in_type" value="decklink" checked> DeckLink</label>
+          <label><input type="radio" name="in_type" value="mediamtx"> mediamtx path</label>
+          <label><input type="radio" name="in_type" value="testsrc"> testsrc</label>
+          <label><input type="radio" name="in_type" value="custom"> custom</label>
+        </div>
+
+        <div class="in-pane" data-pane="decklink">
+          <label>Device <select id="dl-device"></select></label>
+          <label>Video standard <select id="dl-format"></select> <button type="button" class="btn ghost sm" id="dl-query">카드에서 조회</button></label>
+          <div class="muted small" id="dl-query-msg"></div>
+          <label>Audio channels <select id="dl-channels"><option>2</option><option selected>8</option><option>16</option></select></label>
+          <label>raw_format <select id="dl-raw"><option value="auto">auto</option><option>uyvy422</option><option>yuv422p10</option><option>argb</option><option>bgra</option></select></label>
+          <label>video_input <select id="dl-vin"><option value="">default</option><option>sdi</option><option>hdmi</option><option>optical_sdi</option><option>component</option></select></label>
+        </div>
+
+        <div class="in-pane" data-pane="mediamtx">
+          <label>Path <select id="mx-path"></select> <button type="button" class="btn ghost sm" id="mx-refresh">새로고침</button></label>
+          <label>추가 오디오 입력 path <select id="mx-extra" multiple size="4"></select></label>
+          <label>RTSP transport <select id="mx-transport"><option>udp</option><option>tcp</option></select></label>
+          <label><input type="checkbox" id="mx-interlaced"> 소스가 interlaced</label>
+          <button type="button" class="btn ghost sm" id="mx-probe">ffprobe 로 스트림 확인</button>
+          <pre class="probe small" id="mx-probe-out"></pre>
+        </div>
+
+        <div class="in-pane" data-pane="testsrc">
+          <label>Video source <select id="ts-source"></select></label>
+          <label>Video standard <select id="ts-standard"></select></label>
+          <div class="row" id="ts-custom" hidden>
+            <label>size <input id="ts-size" value="1920x1080" class="sm"></label>
+            <label>rate <input id="ts-rate" value="30000/1001" class="sm"></label>
+            <label><input type="checkbox" id="ts-inter"> interlaced</label>
+          </div>
+          <label>Audio channels (1 stream) <input type="number" id="ts-ach" min="1" max="32" value="8" class="sm num"></label>
+          <label>Tone Hz <input type="number" id="ts-freq" value="1000" class="sm num"></label>
+          <div class="muted small">채널마다 3 dB 씩 낮은 1 kHz 톤 (ch1 -6 dBFS) - 레벨미터로 라우팅 확인용</div>
+        </div>
+
+        <div class="in-pane" data-pane="custom">
+          <label>Input args <input id="cu-args" value="-i srt://0.0.0.0:9000?mode=listener" class="wide-in"></label>
+          <label>오디오 스트림별 채널수 (예: 2,2) <input id="cu-layout" value="2" class="sm"></label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>출력 (output)</legend>
+        <div class="seg" id="out-type">
+          <label><input type="radio" name="out_type" value="mediamtx_pairs" checked> mediamtx (N audio stream)</label>
+          <label><input type="radio" name="out_type" value="mediamtx"> mediamtx path</label>
+          <label><input type="radio" name="out_type" value="url"> 외부 URL</label>
+          <label><input type="radio" name="out_type" value="null"> null (test)</label>
+        </div>
+        <div class="out-pane" data-pane="mediamtx_pairs">
+          <label>Base name <input id="op-base" value="sdi1" class="sm"></label>
+          <div id="op-pairs" class="pairs"></div>
+          <div class="muted small">video + 첫 스테레오 쌍 → &lt;base&gt;_va12, 나머지 쌍은 오디오 전용 path</div>
+        </div>
+        <div class="out-pane" data-pane="mediamtx">
+          <label>Path name <input id="om-path" value="out1" class="sm"></label>
+        </div>
+        <div class="out-pane" data-pane="url">
+          <div id="ou-list"></div>
+          <button type="button" class="btn ghost sm" id="ou-add">+ URL</button>
+          <div class="muted small">2개 이상이면 tee muxer (onfail=ignore) 로 한번 인코딩해 여러곳에 전송</div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Video</legend>
+        <label>Codec <select id="v-codec"><option value="h264_nvenc">h264_nvenc</option><option value="libx264">libx264 (h264)</option><option value="copy">stream copy</option><option value="none">none</option></select></label>
+        <div class="v-enc">
+          <div class="row cuda-only">
+            <label>CUDA deinterlace <select id="f-cuda-deint"><option value="">-</option><option>bwdif_cuda</option><option>yadif_cuda</option></select></label>
+            <label>CUDA resize <select id="f-cuda-resize" class="sizesel"></select></label>
+          </div>
+          <div class="row cpu-only">
+            <label>deinterlace (CPU) <select id="f-deint"><option value="">-</option><option>bwdif</option><option>yadif</option><option>estdif</option></select></label>
+            <label>scale <select id="f-scale" class="sizesel"></select></label>
+          </div>
+          <div class="row">
+            <label>deint 출력 <select id="f-deint-rate"><option value="frame">frame (29.97p)</option><option value="field">field (59.94p)</option></select></label>
+            <label>fps <select id="f-fps"><option value="">-</option><option>30000/1001</option><option>60000/1001</option><option>25</option><option>50</option><option>30</option><option>60</option></select></label>
+          </div>
+          <div class="row">
+            <label>bitrate <input id="v-br" value="6M" class="sm"></label>
+            <label>maxrate <input id="v-maxrate" placeholder="=bitrate" class="sm"></label>
+            <label>bufsize <input id="v-bufsize" placeholder="=bitrate" class="sm"></label>
+          </div>
+          <div class="row">
+            <label>GOP <input id="v-gop" type="number" value="30" class="sm num"></label>
+            <label>B-frames <input id="v-bf" type="number" value="0" min="0" max="4" class="sm num"></label>
+            <label>profile <select id="v-profile"><option value="">-</option><option>high</option><option>main</option><option>baseline</option></select></label>
+          </div>
+          <div class="row">
+            <label>preset <select id="v-preset"></select></label>
+            <label>tune <select id="v-tune"></select></label>
+            <label class="nv-only">rc <select id="v-rc"><option>cbr</option><option>vbr</option></select></label>
+            <label><input type="checkbox" id="v-zl" checked> zerolatency</label>
+          </div>
+          <div class="hint" id="v-hint"></div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Audio (stereo 1 stream)</legend>
+        <label>Codec <select id="a-codec"><option value="aac">aac</option><option value="opus">opus</option><option value="mp3">mp3</option><option value="copy">copy</option><option value="none">none</option></select></label>
+        <div class="row a-lr">
+          <label>L <select id="a-left"></select></label>
+          <label>R <select id="a-right"></select></label>
+        </div>
+        <div class="row">
+          <label>bitrate <input id="a-br" value="128k" class="sm"></label>
+          <label>sample rate <select id="a-sr"><option>48000</option><option>44100</option></select></label>
+        </div>
+        <div class="a-ln">
+          <div class="row">
+            <label><input type="checkbox" id="a-ln"> loudnorm (EBU R128)</label>
+            <label>I <input id="a-ln-i" type="number" step="0.5" min="-70" max="-5" value="-23" class="sm num"> LUFS</label>
+            <label>LRA <input id="a-ln-lra" type="number" step="0.5" min="1" max="50" value="7" class="sm num"> LU</label>
+            <label>TP <input id="a-ln-tp" type="number" step="0.5" min="-9" max="0" value="-2" class="sm num"> dBTP</label>
+          </div>
+          <div class="muted small">I: 목표 통합 라우드니스 (EBU R128 -23, ATSC A/85 -24, 스트리밍 -14~-16). LRA: 허용 라우드니스 범위 (작을수록 압축). TP: true peak 상한.
+            1-pass 실시간 모드라 약 3초 lookahead 지연이 추가되고, 모든 오디오 출력(pair path 포함)에 적용됩니다.</div>
+        </div>
+        <div class="muted small" id="a-note"></div>
+      </fieldset>
+    </div>
+
+    <fieldset>
+      <legend>Custom parameters</legend>
+      <div class="row">
+        <label>global <input id="c-global" class="wide-in" placeholder="-threads 4"></label>
+        <label>input <input id="c-input" class="wide-in" placeholder="-thread_queue_size 1024"></label>
+        <label>output <input id="c-output" class="wide-in" placeholder="-max_muxing_queue_size 1024"></label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Encoder</legend>
+      <div class="row">
+        <label>Title <input id="e-title" class="wide-in"></label>
+        <label>Comment <input id="e-comment" class="wide-in"></label>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="e-autostart"> 백엔드 시작시 자동실행</label>
+        <label><input type="checkbox" id="e-autorestart" checked> 오류시 자동재시작</label>
+      </div>
+      <label>Generated command line (직접 편집 가능) <span class="muted small" id="cli-err"></span></label>
+      <textarea id="e-cli" class="cli" rows="9" spellcheck="false"></textarea>
+      <label class="small"><input type="checkbox" id="e-cli-lock"> 직접 편집한 CLI 유지 (helper 변경을 반영하지 않음)</label>
+    </fieldset>
+
+    <div class="dlg-foot">
+      <button value="cancel" class="btn ghost">취소</button>
+      <button type="button" id="helper-ok" class="btn primary">추가</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- monitor helper -->
+<dialog id="dlg-monitor" class="dlg">
+  <form method="dialog" class="dlg-inner">
+    <h2 id="mon-dlg-title">Monitor</h2>
+    <label>Title <input id="m-title" class="wide-in"></label>
+    <div class="row">
+      <span class="muted small">빠른 선택:</span>
+      <span id="m-groups" class="chips"></span>
+      <button type="button" class="btn ghost sm" id="m-refresh">새로고침</button>
+    </div>
+    <div class="muted small">선택 순서대로 표시됩니다. 비디오 트랙이 있는 첫 path 가 비디오 창으로 쓰입니다.</div>
+    <div id="m-paths" class="path-pick"></div>
+    <label>직접 입력 (쉼표 구분) <input id="m-manual" class="wide-in" placeholder="sdi1_va12, sdi1_a34"></label>
+    <div class="dlg-foot">
+      <button value="cancel" class="btn ghost">취소</button>
+      <button type="button" id="mon-ok" class="btn primary">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="/static/reader.js?v=20"></script>
+<script src="/static/meter.js?v=20"></script>
+<script src="/static/app.js?v=20"></script>
+<script src="/static/helper.js?v=20"></script>
+</body>
+</html>

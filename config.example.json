@@ -1,0 +1,144 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080
+  },
+  "ffmpeg": {
+    "path": "ffmpeg",
+    "ffprobe": "ffprobe"
+  },
+  "mediamtx": {
+    "api_url": "http://127.0.0.1:9997",
+    "rtsp_url": "rtsp://127.0.0.1:8554",
+    "rtsp_transport": "udp",
+    "udp_buffer_size": 4194304,
+    "webrtc_port": 8889,
+    "webrtc_url": "",
+    "poll_interval_sec": 2.0
+  },
+  "encoder_watchdog": {
+    "poll_interval_sec": 1.0,
+    "progress_timeout_sec": 10.0,
+    "startup_grace_sec": 15.0,
+    "grace_multiplier": 3.0,
+    "restart_hold_sec": 3.0,
+    "restart_backoff_max_sec": 60.0,
+    "stable_run_sec": 60.0,
+    "stop_timeout_sec": 5.0,
+    "speed_check": true,
+    "speed_min": 0.95,
+    "speed_window_sec": 30.0,
+    "pipe_buffer_bytes": 524288
+  },
+  "ffreport_watchdog": {
+    "dir": "logs/fflog",
+    "loglevel": "info",
+    "max_size_mb": 10.0,
+    "backup_count": 3,
+    "check_interval_sec": 5.0,
+    "tail_lines": 300,
+    "restart_on_patterns": []
+  },
+  "logging": {
+    "dir": "logs",
+    "level": "INFO",
+    "max_size_mb": 10,
+    "backup_count": 5,
+    "ring_size": 1000
+  },
+  "encoders": [
+    {
+      "title": "SDI1 DeckLink Duo (1) → sdi1_*",
+      "comment": "1080i59.94 → bwdif_cuda 29.97p, h264_nvenc 8M, opus 4 pairs",
+      "cli": "ffmpeg \\\n  -f decklink -format_code Hi59 -channels 8 -i 'DeckLink Duo (1)' \\\n  -filter_complex '[0:a:0]asplit=4[s0_a_0_0][s0_a_0_1][s0_a_0_2][s0_a_0_3];[0:v:0]scale=interl=1,format=nv12,hwupload_cuda,bwdif_cuda=mode=0[vout];[s0_a_0_0]pan=stereo|c0=c0|c1=c1[a12];[s0_a_0_1]pan=stereo|c0=c2|c1=c3[a34];[s0_a_0_2]pan=stereo|c0=c4|c1=c5[a56];[s0_a_0_3]pan=stereo|c0=c6|c1=c7[a78]' \\\n  -map '[vout]' -c:v h264_nvenc -preset p4 -tune ll -rc cbr -zerolatency 1 -b:v 8M -maxrate 8M -bufsize 8M -g 30 -bf 0 -map '[a12]' -c:a libopus -b:a 128k -ar 48000 -f rtsp -rtsp_transport udp -buffer_size 4194304 rtsp://127.0.0.1:8554/sdi1_va12 \\\n  -map '[a34]' -c:a libopus -b:a 128k -ar 48000 -f rtsp -rtsp_transport udp -buffer_size 4194304 rtsp://127.0.0.1:8554/sdi1_a34 \\\n  -map '[a56]' -c:a libopus -b:a 128k -ar 48000 -f rtsp -rtsp_transport udp -buffer_size 4194304 rtsp://127.0.0.1:8554/sdi1_a56 \\\n  -map '[a78]' -c:a libopus -b:a 128k -ar 48000 -f rtsp -rtsp_transport udp -buffer_size 4194304 rtsp://127.0.0.1:8554/sdi1_a78",
+      "autostart": false,
+      "auto_restart": true,
+      "speed_restart": false,
+      "scheduled_restart": {
+        "enabled": false,
+        "mode": "daily",
+        "time": "04:00",
+        "interval_min": 1440
+      },
+      "helper": {
+        "input": {
+          "type": "decklink",
+          "decklink": {
+            "device": "DeckLink Duo (1)",
+            "format_code": "Hi59",
+            "channels": 8,
+            "raw_format": "auto",
+            "video_input": ""
+          }
+        },
+        "audio_layout": [
+          {
+            "input": 0,
+            "index": 0,
+            "channels": 8,
+            "label": "decklink"
+          }
+        ],
+        "sink": {
+          "type": "mediamtx_pairs",
+          "base": "sdi1",
+          "pairs": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        "outputs": [],
+        "video": {
+          "codec": "h264_nvenc",
+          "filters": {
+            "cuda_deint": "bwdif_cuda",
+            "cuda_resize": "",
+            "deint": "",
+            "scale": "",
+            "fps": "",
+            "deint_rate": "frame"
+          },
+          "bitrate": "8M",
+          "maxrate": "",
+          "bufsize": "",
+          "gop": 30,
+          "bframes": 0,
+          "profile": "",
+          "preset": "p4",
+          "tune": "ll",
+          "rc": "cbr",
+          "zerolatency": true
+        },
+        "audio": {
+          "codec": "opus",
+          "left": 0,
+          "right": 1,
+          "bitrate": "128k",
+          "sample_rate": 48000
+        },
+        "custom": {
+          "global": "",
+          "input": "",
+          "output": ""
+        }
+      },
+      "id": "enc_5dca2a67"
+    }
+  ],
+  "monitors": [
+    {
+      "title": "SDI1",
+      "paths": [
+        "sdi1_va12",
+        "sdi1_a34",
+        "sdi1_a56",
+        "sdi1_a78"
+      ],
+      "muted": true,
+      "enabled": true,
+      "id": "mon_61b54fec"
+    }
+  ]
+}

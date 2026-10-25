@@ -1,0 +1,22 @@
+# python
+.venv/
+__pycache__/
+*.py[cod]
+
+# runtime state: edited from the UI on each host (see config.example.json)
+config.json
+config.json.tmp
+
+# backend log, console log, per-encoder fflog
+logs/
+
+# reference material copied in during development (web/reader.js is the one served)
+SKILL.md
+/reader.js
+
+# editors / OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
