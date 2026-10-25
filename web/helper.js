@@ -40,6 +40,13 @@ const EncoderHelper = {
     $("#mx-refresh").addEventListener("click", () => this.loadPaths());
     $("#mx-probe").addEventListener("click", () => this.probe());
     $("#ou-add").addEventListener("click", () => { this.addUrl(); this.refresh(); });
+    $("#ou-add-mc").addEventListener("click", () => {
+      // remove the untouched empty URL row so the preset replaces it
+      $$("#ou-list .url-row").forEach((r) => { if (!r.classList.contains("mc") && !$(".ou-url", r).value) r.remove(); });
+      this.addMcast();
+      if ($("#a-codec").value === "opus") $("#a-codec").value = "aac";  // most MPEG-TS receivers don't decode Opus
+      this.refresh();
+    });
     $("#helper-ok").addEventListener("click", () => this.submit());
     $("#e-cli-lock").addEventListener("change", (e) => { if (!e.target.checked) this.build(); });
     $("#helper-form").addEventListener("input", (e) => {
@@ -73,7 +80,7 @@ const EncoderHelper = {
     $("#caps-warn").hidden = !warn.length;
     $("#caps-warn").textContent = warn.length ? `이 시스템에서 ${warn.join(" / ")} — libx264 / CPU filter 를 사용하세요.` : "";
 
-    await Promise.all([this.loadDevices(), this.loadPaths()]);
+    await Promise.all([this.loadDevices(), this.loadPaths(), this.loadLocalIps()]);
     $("#ou-list").innerHTML = "";
     $("#e-cli-lock").checked = false;
 
@@ -170,6 +177,41 @@ const EncoderHelper = {
     $(".ou-fmt", row).value = format;
     $("button", row).onclick = () => { row.remove(); this.refresh(); };
     $("#ou-list").append(row);
+  },
+
+  /* preset: MPEG-TS over UDP multicast. Stored as a normal url output (+ the fields to edit it again) */
+  async loadLocalIps() {
+    try {
+      const sys = await api("GET", "/api/system");
+      this.localIps = ((sys.system || sys).nics || []).flatMap((n) => n.ips.filter((ip) => !ip.startsWith("127.")).map((ip) => ({ ip, nic: n.name })));
+    } catch { this.localIps = this.localIps || []; }
+  },
+  addMcast(mc = {}) {
+    this.localIps ||= [];
+    const used = $$("#ou-list .url-row.mc").length;
+    const m = { group: "239.1.1." + (1 + used), port: 5000, ttl: 16, localaddr: "", ...mc };
+    const row = document.createElement("div");
+    row.className = "url-row mc";
+    const ifOpts = [`<option value="">NIC: default route</option>`]
+      .concat(this.localIps.map((x) => `<option value="${esc(x.ip)}">${esc(x.nic)} ${esc(x.ip)}</option>`));
+    if (m.localaddr && !this.localIps.some((x) => x.ip === m.localaddr)) ifOpts.push(`<option value="${esc(m.localaddr)}">${esc(m.localaddr)}</option>`);
+    row.innerHTML = `<span class="mc-tag" title="MPEG-TS over UDP multicast">TS mcast</span>` +
+      `<input class="mc-group" placeholder="239.1.1.1" value="${esc(m.group)}" title="multicast group (224.0.0.0 – 239.255.255.255)">` +
+      `<span>:</span><input class="mc-port" type="number" min="1" max="65535" value="${esc(m.port)}" title="port">` +
+      `<label>TTL <input class="mc-ttl" type="number" min="1" max="255" value="${esc(m.ttl)}"></label>` +
+      `<select class="mc-if" title="송출 NIC (localaddr)">${ifOpts.join("")}</select>` +
+      `<button type="button" class="btn ghost sm">✕</button>`;
+    $(".mc-if", row).value = m.localaddr;
+    $("button", row).onclick = () => { row.remove(); this.refresh(); };
+    $("#ou-list").append(row);
+  },
+  mcastOutput(row) {
+    const mc = { group: $(".mc-group", row).value.trim(), port: Number($(".mc-port", row).value) || 5000,
+                 ttl: Number($(".mc-ttl", row).value) || 16, localaddr: $(".mc-if", row).value };
+    if (!mc.group) return null;
+    const q = [`pkt_size=1316`, `ttl=${mc.ttl}`];
+    if (mc.localaddr) q.push(`localaddr=${mc.localaddr}`);
+    return { type: "url", url: `udp://${mc.group}:${mc.port}?${q.join("&")}`, format: "mpegts", preset: "udp_mcast", mc };
   },
 
   /* CUDA filters exist only on the NVENC path: carry the choice over to the CPU equivalent */
@@ -364,7 +406,9 @@ const EncoderHelper = {
       custom: { global: $("#c-global").value, input: $("#c-input").value, output: $("#c-output").value },
     };
     if (outType === "mediamtx") spec.outputs = [{ type: "mediamtx", path: $("#om-path").value }];
-    if (outType === "url") spec.outputs = $$("#ou-list .url-row").map((r) => ({ type: "url", url: $(".ou-url", r).value, format: $(".ou-fmt", r).value })).filter((o) => o.url);
+    if (outType === "url") spec.outputs = $$("#ou-list .url-row").map((r) => r.classList.contains("mc")
+      ? this.mcastOutput(r)
+      : { type: "url", url: $(".ou-url", r).value, format: $(".ou-fmt", r).value }).filter((o) => o && o.url);
     if (outType === "null") spec.outputs = [{ type: "null" }];
     return spec;
   },
@@ -405,7 +449,8 @@ const EncoderHelper = {
     $("#op-base").value = sk.base || "sdi1";
     $("#ou-list").innerHTML = "";
     (s.outputs || []).forEach((o) => {
-      if (o.type === "url") this.addUrl(o.url, o.format || "auto");
+      if (o.type === "url" && o.preset === "udp_mcast") this.addMcast(o.mc);
+      else if (o.type === "url") this.addUrl(o.url, o.format || "auto");
       if (o.type === "mediamtx") $("#om-path").value = o.path;
     });
     if (!$("#ou-list").children.length) this.addUrl();
@@ -493,6 +538,11 @@ const EncoderHelper = {
     $(".a-ln").hidden = ["copy", "none"].includes($("#a-codec").value);
     $$(".a-ln input[type=number]").forEach((i) => { i.disabled = !$("#a-ln").checked; });
     const notes = [];
+    if (outType === "url") {
+      const bad = $$("#ou-list .url-row.mc .mc-group").map((i) => i.value.trim()).filter((g) => g && !/^2(2[4-9]|3\d)\.\d+\.\d+\.\d+$/.test(g));
+      if ($$("#ou-list .url-row.mc").length && $("#a-codec").value === "opus") notes.push("MPEG-TS 수신기(IRD, VLC 외 다수)는 Opus 를 지원하지 않는 경우가 많습니다 — AAC 권장.");
+      if (bad.length) notes.push(`${bad.join(", ")} 은 멀티캐스트 주소(224.0.0.0 – 239.255.255.255)가 아닙니다.`);
+    }
     if (pairs) notes.push("각 스테레오 쌍이 개별 mediamtx path 로 전송됩니다 (L/R 선택 불필요).");
     const toMtx = outType.startsWith("mediamtx");
     if (toMtx && ["aac", "mp3"].includes($("#a-codec").value)) notes.push("WebRTC 모니터(브라우저)는 AAC/MP3 를 재생하지 못합니다 — 모니터할 path 는 opus 권장.");

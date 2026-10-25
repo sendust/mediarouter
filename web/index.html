@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MEDIAROUTER by sendust</title>
-<link rel="stylesheet" href="/static/style.css?v=21">
+<link rel="stylesheet" href="/static/style.css?v=24">
 </head>
 <body>
 <header class="topbar">
@@ -213,7 +213,10 @@
         </div>
         <div class="out-pane" data-pane="url">
           <div id="ou-list"></div>
-          <button type="button" class="btn ghost sm" id="ou-add">+ URL</button>
+          <div class="ou-btns">
+            <button type="button" class="btn ghost sm" id="ou-add">+ URL</button>
+            <button type="button" class="btn ghost sm" id="ou-add-mc" title="프리셋: MPEG-TS over UDP multicast (pkt_size 1316 = TS 7 packets)">+ UDP 멀티캐스트 (MPEG-TS)</button>
+          </div>
           <div class="muted small">2개 이상이면 tee muxer (onfail=ignore) 로 한번 인코딩해 여러곳에 전송</div>
         </div>
       </fieldset>
@@ -330,9 +333,9 @@
   </form>
 </dialog>
 
-<script src="/static/reader.js?v=21"></script>
-<script src="/static/meter.js?v=21"></script>
-<script src="/static/app.js?v=21"></script>
-<script src="/static/helper.js?v=21"></script>
+<script src="/static/reader.js?v=24"></script>
+<script src="/static/meter.js?v=24"></script>
+<script src="/static/app.js?v=24"></script>
+<script src="/static/helper.js?v=24"></script>
 </body>
 </html>

@@ -169,6 +169,17 @@ pre { margin: 4px 0; }
 .pairs { display: flex; flex-wrap: wrap; gap: 4px 12px; font-family: var(--mono); }
 .url-row { display: flex; gap: 6px; margin-bottom: 4px; }
 .url-row input { flex: 1; }
+.url-row.mc { align-items: center; flex-wrap: wrap; row-gap: 4px; }
+.url-row.mc > * { flex: none; }
+.url-row.mc .mc-group { width: 8em; }
+.url-row.mc .mc-port { width: 4.5em; }
+.url-row.mc .mc-ttl { width: 3.8em; }
+.url-row.mc label { display: inline-flex; gap: 4px; align-items: center; }
+.url-row.mc .mc-if { flex: 1 1 6em; min-width: 0; width: 6em; }
+.url-row.mc .btn { width: auto; }
+.ou-btns { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0; }
+.ou-btns .btn { width: auto; }
+.mc-tag { font-size: 11px; padding: 1px 6px; border: 1px solid #7fd4ff; color: #7fd4ff; border-radius: 3px; white-space: nowrap; }
 .chips { display: inline-flex; gap: 4px; flex-wrap: wrap; }
 .path-pick { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow: auto; border: 1px solid var(--border); border-radius: 4px; padding: 4px; }
 .path-pick label { display: flex; gap: 8px; font-family: var(--mono); font-size: 12px; }
