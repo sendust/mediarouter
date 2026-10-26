@@ -1,6 +1,8 @@
 """System status collector (1 s tick)."""
 import os
+import shutil
 import socket
+import subprocess
 import threading
 import time
 
@@ -22,7 +24,42 @@ def _cpu_model():
     return os.uname().machine
 
 
+_GPU_FIELDS = ("index", "name", "util_gpu", "util_enc", "util_dec", "temp_c", "power_w",
+               "power_limit_w", "mem_used_mib", "mem_total_mib")
+_GPU_QUERY = ("index,name,utilization.gpu,utilization.encoder,utilization.decoder,temperature.gpu,"
+              "power.draw,power.limit,memory.used,memory.total")
+
+
+def _num(v):
+    try:
+        return float(v)
+    except ValueError:
+        return None  # "[N/A]" / "[Not Supported]"
+
+
+def _gpus(smi):
+    """NVIDIA GPUs via nvidia-smi: utilization (gpu / NVENC / NVDEC), temperature, power, VRAM."""
+    r = subprocess.run([smi, f"--query-gpu={_GPU_QUERY}", "--format=csv,noheader,nounits"],
+                       capture_output=True, text=True, timeout=3)
+    if r.returncode != 0:
+        raise RuntimeError((r.stderr or r.stdout).strip() or f"rc={r.returncode}")
+    out = []
+    for line in r.stdout.strip().splitlines():
+        vals = [v.strip() for v in line.split(",")]
+        if len(vals) != len(_GPU_FIELDS):
+            continue
+        g = dict(zip(_GPU_FIELDS, vals))
+        for k in _GPU_FIELDS[2:]:
+            g[k] = _num(g[k])
+        g["index"] = int(g["index"])
+        out.append(g)
+    return out
+
+
 class SysInfo(threading.Thread):
+    GPU_PERIOD = 2.0   # nvidia-smi is a process spawn: every other tick is plenty
+    GPU_RETRY = 60.0   # after a failure (driver reload etc.)
+
     def __init__(self):
         super().__init__(name="sysinfo", daemon=True)
         self._stop = threading.Event()
@@ -35,6 +72,26 @@ class SysInfo(threading.Thread):
         self.snapshot = dict(self.static)
         self._prev_net = None
         self._prev_ts = None
+        self._smi = shutil.which("nvidia-smi")  # nvidia systems only; otherwise no GPU section
+        self._gpus = []
+        self._gpu_next = 0.0
+        self._gpu_err = None
+
+    def _collect_gpus(self, now):
+        if not self._smi or now < self._gpu_next:
+            return
+        try:
+            self._gpus = _gpus(self._smi)
+            self._gpu_next = now + self.GPU_PERIOD
+            if self._gpu_err:
+                log.info("nvidia-smi OK again")
+            self._gpu_err = None
+        except Exception as e:
+            self._gpus = []
+            self._gpu_next = now + self.GPU_RETRY
+            if str(e) != self._gpu_err:
+                log.warning("nvidia-smi failed: %s (retry in %.0fs)", e, self.GPU_RETRY)
+            self._gpu_err = str(e)
 
     def collect(self):
         now = time.time()
@@ -61,6 +118,7 @@ class SysInfo(threading.Thread):
         for p in psutil.process_iter(["name"]):
             if (p.info["name"] or "").startswith("ffmpeg"):
                 ff += 1
+        self._collect_gpus(now)
         vm = psutil.virtual_memory()
         snap = dict(self.static)
         snap.update({
@@ -72,6 +130,7 @@ class SysInfo(threading.Thread):
             "mem_free": vm.free,
             "mem_available": vm.available,
             "nics": nics,
+            "gpus": self._gpus,
         })
         self.snapshot = snap
 

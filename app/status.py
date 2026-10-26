@@ -128,6 +128,7 @@ def build(sysinfo, mtx_snapshot, encoders, monitors, base_dir, started_at):
         "disk_free_bytes": disk.free,
         "disk_used_percent": round(disk_pct, 1),
         "ffmpeg_processes": sysd.get("ffmpeg_count"),
+        "gpus": sysd.get("gpus") or [],
         "nics": [{"name": n["name"], "ips": n["ips"], "speed_mbps": n["speed_mbps"],
                   "rx_bps": round(n["rx_bps"]), "tx_bps": round(n["tx_bps"])} for n in sysd.get("nics") or []],
     }
@@ -190,6 +191,12 @@ def to_text(doc):
         f"CPU {s['cpu_percent']:.0f}% · RAM avail {s['mem_available_percent']}% · disk {s['disk_used_percent']}% · ffmpeg {s['ffmpeg_processes']}",
         f"mediamtx {'OK' if doc['mediamtx']['ok'] else 'DOWN'} · paths {doc['mediamtx']['paths_ready']}/{doc['mediamtx']['paths_total']}"
         f" · readers {doc['mediamtx']['readers_total']}",
+    ]
+    for g in s.get("gpus") or []:
+        f = lambda v, u="%": f"{v:.0f}{u}" if v is not None else "-"
+        lines.append(f"GPU{g['index']} {g['name']} · gpu {f(g['util_gpu'])} enc {f(g['util_enc'])} dec {f(g['util_dec'])}"
+                     f" · {f(g['temp_c'], '°C')} · {f(g['power_w'], 'W')}")
+    lines += [
         "encoders " + ", ".join(f"{k} {v}" for k, v in c.items()),
     ]
     for e in doc["encoders"]:

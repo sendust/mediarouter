@@ -140,6 +140,8 @@ a.mtx-open { color: var(--text); text-decoration: none; cursor: pointer; }
 a.mtx-open:hover { color: #7fd4ff; text-decoration: underline; }
 a.mtx-open .ext { font-size: 10px; color: var(--muted); }
 a.mtx-open:hover .ext { color: #7fd4ff; }
+.mtx-rate { display: flex; gap: 14px; font-family: var(--mono); font-size: 12px; margin: 2px 0; }
+.mtx-rate span:first-child { color: #7fd4ff; }
 .mtx-path .r { font-family: var(--mono); font-size: 11px; color: var(--muted); }
 .bar { height: 4px; background: #262c35; border-radius: 2px; overflow: hidden; margin-top: 2px; }
 .bar i { display: block; height: 100%; background: var(--accent); }
@@ -236,3 +238,7 @@ a.mtx-open:hover .ext { color: #7fd4ff; }
 .probe:empty { display: none; }
 
 .dlg select:disabled, .dlg input:disabled { opacity: .45; cursor: not-allowed; }
+#sys-gpus .warn { color: var(--warn); }
+#sys-gpus .bad { color: var(--err); font-weight: 600; }
+#sys-gpus td { min-width: 3.5em; }
+#sys-gpus td:nth-child(n+2) { white-space: nowrap; }

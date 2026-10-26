@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MEDIAROUTER by sendust</title>
-<link rel="stylesheet" href="/static/style.css?v=33">
+<link rel="stylesheet" href="/static/style.css?v=35">
 </head>
 <body>
 <header class="topbar">
@@ -39,6 +39,10 @@
     <div class="panel">
       <h3>System</h3>
       <dl class="kv" id="sys-kv"></dl>
+      <div id="sys-gpu" hidden>
+        <h4>GPU</h4>
+        <table class="tbl" id="sys-gpus"><thead><tr><th>장치</th><th>GPU</th><th>ENC</th><th>DEC</th><th>온도</th><th>전력</th><th>VRAM</th></tr></thead><tbody></tbody></table>
+      </div>
       <h4>Network</h4>
       <table class="tbl" id="sys-nics"><thead><tr><th>NIC</th><th>IP</th><th>RX</th><th>TX</th></tr></thead><tbody></tbody></table>
     </div>
@@ -342,9 +346,9 @@
   </form>
 </dialog>
 
-<script src="/static/reader.js?v=33"></script>
-<script src="/static/meter.js?v=33"></script>
-<script src="/static/app.js?v=33"></script>
-<script src="/static/helper.js?v=33"></script>
+<script src="/static/reader.js?v=35"></script>
+<script src="/static/meter.js?v=35"></script>
+<script src="/static/app.js?v=35"></script>
+<script src="/static/helper.js?v=35"></script>
 </body>
 </html>

@@ -26,7 +26,7 @@ class MediaMTXPoller(threading.Thread):
         self._stop = threading.Event()
         self.snapshot = {"ok": False, "error": "not polled yet", "paths": [], "ts": 0}
         self._was_ok = None
-        self._prev_bytes = {}  # path -> (ts, inbound bytes) for bitrate
+        self._prev_bytes = {}  # path -> (ts, inbound bytes, outbound bytes) for bitrate
 
     def _get(self, base, path):
         with urllib.request.urlopen(base.rstrip("/") + path + "?itemsPerPage=1000", timeout=2) as r:
@@ -73,11 +73,16 @@ class MediaMTXPoller(threading.Thread):
                                "width": props.get("width"), "height": props.get("height"),
                                "profile": props.get("profile"), "level": props.get("level")})
             bytes_in = p.get("inboundBytes", p.get("bytesReceived", 0)) or 0
-            self._prev_bytes[p.get("name")] = (now, bytes_in)
+            bytes_out = p.get("outboundBytes", p.get("bytesSent", 0)) or 0
+            self._prev_bytes[p.get("name")] = (now, bytes_in, bytes_out)
             prev = prev_bytes.get(p.get("name"))
-            bps_in = None
-            if prev and now > prev[0] and bytes_in >= prev[1]:
-                bps_in = (bytes_in - prev[1]) * 8 / (now - prev[0])
+            bps_in = bps_out = None
+            if prev and now > prev[0]:
+                dt = now - prev[0]
+                if bytes_in >= prev[1]:
+                    bps_in = (bytes_in - prev[1]) * 8 / dt
+                if bytes_out >= prev[2]:
+                    bps_out = (bytes_out - prev[2]) * 8 / dt
             out.append({
                 "name": p.get("name"),
                 "ready": p.get("ready", False),
@@ -88,7 +93,8 @@ class MediaMTXPoller(threading.Thread):
                 "readers": readers,
                 "bytes_in": bytes_in,
                 "bps_in": bps_in,
-                "bytes_out": p.get("outboundBytes", p.get("bytesSent", 0)),
+                "bytes_out": bytes_out,
+                "bps_out": bps_out,
             })
         out.sort(key=lambda x: x["name"] or "")
         self.snapshot = {"ok": True, "error": "", "paths": out, "ts": time.time()}

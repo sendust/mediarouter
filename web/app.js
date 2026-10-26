@@ -586,12 +586,29 @@ function renderSystem(s) {
     ["시스템 시간", esc(s.time)],
   ];
   $("#sys-kv").innerHTML = kv.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+  renderGpus(s.gpus || []);
   $("#sys-nics tbody").innerHTML = (s.nics || []).map((n) => {
     const cap = n.speed_mbps ? n.speed_mbps * 1e6 : 0;
     const bar = (v) => cap ? `<div class="bar"><i style="width:${Math.min(100, (v / cap) * 100).toFixed(1)}%"></i></div>` : "";
     return `<tr><td>${esc(n.name)}<div class="muted small">${n.speed_mbps ? n.speed_mbps + " Mb/s" : ""}</div></td>` +
       `<td>${n.ips.map(esc).join("<br>") || "-"}</td><td>${fmt.bps(n.rx_bps)}${bar(n.rx_bps)}</td><td>${fmt.bps(n.tx_bps)}${bar(n.tx_bps)}</td></tr>`;
   }).join("");
+}
+
+/* NVIDIA only: the section stays hidden when the backend reports no GPUs (no nvidia-smi) */
+function renderGpus(gpus) {
+  $("#sys-gpu").hidden = !gpus.length;
+  if (!gpus.length) return;
+  const pct = (v, warn = 90) => v == null ? "-"
+    : `<span class="${v >= warn ? "warn" : ""}">${v.toFixed(0)}%</span><div class="bar"><i style="width:${Math.min(100, v)}%"></i></div>`;
+  const temp = (t) => t == null ? "-" : `<span class="${t >= 85 ? "bad" : t >= 75 ? "warn" : ""}">${t.toFixed(0)}°C</span>`;
+  const power = (g) => g.power_w == null ? "-"
+    : `${g.power_w.toFixed(0)} W` + (g.power_limit_w ? `<div class="muted small">/ ${g.power_limit_w.toFixed(0)} W</div>` : "");
+  const vram = (g) => g.mem_total_mib ? `${(g.mem_used_mib / 1024).toFixed(1)}/${(g.mem_total_mib / 1024).toFixed(1)} G` +
+    `<div class="bar"><i style="width:${(g.mem_used_mib / g.mem_total_mib * 100).toFixed(1)}%"></i></div>` : "-";
+  $("#sys-gpus tbody").innerHTML = gpus.map((g) =>
+    `<tr><td>${esc(g.name)}<div class="muted small">#${g.index}</div></td><td>${pct(g.util_gpu)}</td><td>${pct(g.util_enc)}</td>` +
+    `<td>${pct(g.util_dec)}</td><td>${temp(g.temp_c)}</td><td>${power(g)}</td><td>${vram(g)}</td></tr>`).join("");
 }
 
 // path name in the mediamtx list -> mediamtx's own WebRTC player in a separate window
@@ -624,6 +641,8 @@ function renderMtx(m) {
         : '<div class="r">↳ reader 없음</div>';
       const href = `${App.whepBase()}/${encodeURIComponent(p.name)}/`;
       return `<div class="mtx-path"><a class="n mtx-open" href="${esc(href)}" target="_blank" rel="noopener" data-path="${esc(p.name)}" title="WebRTC 로 새 창에서 보기 (mediamtx player)">${esc(p.name)} <span class="ext">↗</span></a> <span class="badge ${p.ready ? "on" : "off"}">${p.ready ? "ready" : "not ready"}</span>` +
+        `<div class="mtx-rate"><span title="publisher → mediamtx">▼ ${p.bps_in != null ? fmt.bps(p.bps_in) : "-"}</span>` +
+        `<span title="mediamtx → readers (합계)">▲ ${p.bps_out != null ? fmt.bps(p.bps_out) : "-"}</span></div>` +
         `<div class="muted small">${esc(tracks)}</div>` +
         `<div class="small">source: ${esc(p.source_type || "-")} ${esc(p.source_remote || "")} · in ${fmt.bytes(p.bytes_in)} · out ${fmt.bytes(p.bytes_out)}</div>${readers}</div>`;
     }).join("");
