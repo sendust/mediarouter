@@ -93,6 +93,10 @@ class Builder:
         custom_in = shlex.split(self.spec.get("custom", {}).get("input", "") or "")
         self.video_label = None
         self.interlaced = False
+        # NVDEC: decode the (compressed) video input on the GPU and keep frames in CUDA memory
+        v = self.spec.get("video") or {}
+        self.nvdec = bool(inp.get("nvdec")) and kind in ("mediamtx", "custom") and v.get("codec") not in ("copy", "none")
+        hw = ["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"] if self.nvdec else []
 
         if kind == "decklink":
             d = inp.get("decklink", {})
@@ -117,7 +121,7 @@ class Builder:
             for n, path in enumerate(paths):
                 args = ["-rtsp_transport", transport, "-timeout", "5000000"] + self._udp_buf(transport)
                 if n == 0:
-                    args += custom_in
+                    args += hw + custom_in
                 args += ["-i", self._rtsp_url(path)]
                 i = self._add_input(args)
                 if n == 0:
@@ -157,6 +161,9 @@ class Builder:
         else:  # custom
             c = inp.get("custom", {})
             args = shlex.split(c.get("args") or "-i input")
+            if hw:  # applies to the first -i only
+                k = args.index("-i") if "-i" in args else 0
+                args = args[:k] + hw + args[k:]
             self.inputs += max(1, args.count("-i"))
             self.groups.append(args)
             self.video_label = "0:v:0"
@@ -186,20 +193,27 @@ class Builder:
             cuda.append(f"scale_cuda={f['cuda_resize'].replace('x', ':')}")
         fps = f.get("fps")
 
-        chain = list(cpu)
+        nvenc = codec == "h264_nvenc"
+        on_gpu = self.nvdec      # NVDEC frames arrive as CUDA surfaces (nv12)
+        chain = []
+        if on_gpu and (cpu or (not cuda and not nvenc)):
+            chain += ["hwdownload", "format=nv12"]   # CPU filters / CPU encoder need system memory
+            on_gpu = False
+        chain += cpu
         if cuda:
-            # hwupload_cuda doesn't take 4:2:2 (decklink uyvy422): convert, interlace aware
-            chain.append("scale=interl=1,format=nv12" if f.get("cuda_deint") else "format=nv12")
-            chain.append("hwupload_cuda")
+            if not on_gpu:
+                # hwupload_cuda doesn't take 4:2:2 (decklink uyvy422): convert, interlace aware
+                chain.append("scale=interl=1,format=nv12" if f.get("cuda_deint") else "format=nv12")
+                chain.append("hwupload_cuda")
             chain += cuda
             if fps:
                 chain.append(f"fps={fps}")
-            if codec != "h264_nvenc":
+            if not nvenc:
                 chain += ["hwdownload", "format=nv12"]
         else:
             if fps:
                 chain.append(f"fps={fps}")
-            if codec in ("libx264", "h264_nvenc"):
+            if codec in ("libx264", "h264_nvenc") and not on_gpu:
                 chain.append("format=yuv420p")
 
         self.fc.append(f"[{src}]{','.join(chain) or 'null'}[vout]")

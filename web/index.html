@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MEDIAROUTER by sendust</title>
-<link rel="stylesheet" href="/static/style.css?v=27">
+<link rel="stylesheet" href="/static/style.css?v=29">
 </head>
 <body>
 <header class="topbar">
@@ -193,6 +193,11 @@
           <label>Input args <input id="cu-args" value="-i srt://0.0.0.0:9000?mode=listener" class="wide-in"></label>
           <label>오디오 스트림별 채널수 (예: 2,2) <input id="cu-layout" value="2" class="sm"></label>
         </div>
+        <div class="row" id="nvdec-row">
+          <label title="입력 비디오(H.264/HEVC 등)를 GPU(NVDEC)로 디코딩. 프레임이 GPU 메모리에 남아 CUDA 필터/NVENC 까지 복사 없이 처리됩니다. CPU 필터나 libx264 를 쓰면 자동으로 hwdownload 합니다.">
+            <input type="checkbox" id="in-nvdec"> NVDEC (GPU 디코딩)</label>
+          <span class="muted small" id="nvdec-note"></span>
+        </div>
       </fieldset>
 
       <fieldset>
@@ -337,9 +342,9 @@
   </form>
 </dialog>
 
-<script src="/static/reader.js?v=27"></script>
-<script src="/static/meter.js?v=27"></script>
-<script src="/static/app.js?v=27"></script>
-<script src="/static/helper.js?v=27"></script>
+<script src="/static/reader.js?v=29"></script>
+<script src="/static/meter.js?v=29"></script>
+<script src="/static/app.js?v=29"></script>
+<script src="/static/helper.js?v=29"></script>
 </body>
 </html>

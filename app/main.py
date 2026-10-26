@@ -2,6 +2,7 @@
 import asyncio
 import json
 import os
+import threading
 import time
 from contextlib import asynccontextmanager
 
@@ -38,6 +39,9 @@ ffreport = FFReportWatchdog(manager, store.section("ffreport_watchdog"))
 async def lifespan(_app):
     log.info("mediarouter backend starting (config %s)", CONFIG_PATH)
     manager.kill_orphans()
+    # GPU capability probe (~2 s) in the background; the helper waits on it if opened early
+    threading.Thread(target=helpers.capabilities, args=(store.section("ffmpeg")["path"],),
+                     name="caps-probe", daemon=True).start()
     sysinfo.start()
     mtx.start()
     ffreport.start()

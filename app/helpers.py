@@ -1,5 +1,6 @@
 """Helper-dialog backends: DeckLink enumeration, lavfi sources, probing, capabilities."""
 import json
+import logging
 import re
 import subprocess
 import threading
@@ -107,20 +108,63 @@ def probe(ffprobe, url, transport="udp"):
     return {"ok": True, "streams": streams}
 
 
+def _nvdec_probe(ffmpeg):
+    """Encode a few H.264 frames on the CPU, decode them with NVDEC into CUDA frames.
+    hwdownload only accepts hardware frames, so success proves the GPU decoder was used."""
+    try:
+        sample = subprocess.run([ffmpeg, "-hide_banner", "-v", "error", "-f", "lavfi", "-i", "testsrc2=s=1280x720:r=30",
+                                 "-frames:v", "10", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-f", "h264", "-"],
+                                capture_output=True, timeout=20)
+        if sample.returncode != 0 or not sample.stdout:
+            return False, "sample encode failed: " + _last_line(sample.stderr.decode(errors="replace"))
+        p = subprocess.run([ffmpeg, "-hide_banner", "-v", "error", "-hwaccel", "cuda", "-hwaccel_output_format", "cuda",
+                            "-f", "h264", "-i", "-", "-vf", "hwdownload,format=nv12", "-f", "null", "-"],
+                           input=sample.stdout, capture_output=True, timeout=20)
+        if p.returncode != 0:
+            return False, _last_line(p.stderr.decode(errors="replace"))
+        return True, ""
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return False, str(e)
+
+
 def capabilities(ffmpeg):
-    """Probe NVENC/CUDA with a real tiny encode (an encoder listed in -encoders may still be unusable)."""
+    """Probe NVENC / NVDEC / CUDA filters with real tiny jobs (a codec or filter that ffmpeg
+    lists may still be unusable, e.g. driver/API version mismatch). Logged once, cached."""
     global _caps
     with _caps_lock:
         if _caps is not None:
             return _caps
+        rc, out, _ = _run([ffmpeg, "-hide_banner", "-version"])
+        version = out.splitlines()[0].split(" Copyright")[0] if rc == 0 and out else "ffmpeg not runnable"
+        rc, out, _ = _run(["nvidia-smi", "--query-gpu=name,driver_version", "--format=csv,noheader"])
+        gpu = out.strip().replace("\n", " / ") if rc == 0 and out.strip() else "nvidia-smi not available"
+
         base = [ffmpeg, "-hide_banner", "-v", "error", "-f", "lavfi", "-i", "color=s=1280x720:d=0.2"]
         rc, _, err = _run(base + ["-frames:v", "1", "-c:v", "h264_nvenc", "-f", "null", "-"], timeout=20)
-        nvenc = rc == 0
-        rc2, _, err2 = _run(base + ["-frames:v", "1", "-vf", "format=nv12,hwupload_cuda,scale_cuda=640:360",
-                                    "-f", "null", "-"], timeout=20)
-        cuda = rc2 == 0
-        _caps = {"nvenc": nvenc, "cuda": cuda,
-                 "nvenc_error": "" if nvenc else _last_line(err),
-                 "cuda_error": "" if cuda else _last_line(err2)}
-        log.info("capabilities: nvenc=%s cuda=%s", nvenc, cuda)
+        nvenc, nvenc_err = rc == 0, "" if rc == 0 else _last_line(err)
+        nvdec, nvdec_err = _nvdec_probe(ffmpeg)
+        filters = {}
+        for name, chain in (("hwupload_cuda+scale_cuda", "format=nv12,hwupload_cuda,scale_cuda=640:360"),
+                            ("bwdif_cuda", "format=nv12,hwupload_cuda,bwdif_cuda"),
+                            ("yadif_cuda", "format=nv12,hwupload_cuda,yadif_cuda")):
+            rc, _, err = _run(base + ["-frames:v", "2", "-vf", chain, "-f", "null", "-"], timeout=20)
+            filters[name] = "" if rc == 0 else _last_line(err)
+        cuda = filters["hwupload_cuda+scale_cuda"] == ""
+        _caps = {"nvenc": nvenc, "nvdec": nvdec, "cuda": cuda,
+                 "nvenc_error": nvenc_err, "nvdec_error": nvdec_err,
+                 "cuda_error": filters["hwupload_cuda+scale_cuda"],
+                 "cuda_filters": {k: v == "" for k, v in filters.items()},
+                 "ffmpeg": version, "gpu": gpu}
+
+        ok = lambda b: "OK" if b else "UNAVAILABLE"
+        log.info("capabilities: %s", version)
+        log.info("capabilities: GPU %s", gpu)
+        lvl = lambda b: logging.INFO if b else logging.WARNING
+        log.log(lvl(nvenc), "capabilities: NVENC (h264_nvenc) %s%s", ok(nvenc), f" — {nvenc_err}" if nvenc_err else "")
+        log.log(lvl(nvdec), "capabilities: NVDEC (hwaccel cuda) %s%s", ok(nvdec), f" — {nvdec_err}" if nvdec_err else "")
+        for k, e in filters.items():
+            log.log(lvl(not e), "capabilities: CUDA filter %s %s%s", k, ok(not e), f" — {e}" if e else "")
+        if not (nvenc and nvdec and cuda):
+            log.warning("capabilities: GPU features missing (nvenc=%s nvdec=%s cuda=%s) — helper falls back to "
+                        "libx264 / CPU filters", nvenc, nvdec, cuda)
         return _caps

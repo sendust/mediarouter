@@ -77,6 +77,7 @@ const EncoderHelper = {
     const warn = [];
     if (!c.nvenc) warn.push(`NVENC 사용 불가 (${c.nvenc_error || "probe failed"})`);
     if (!c.cuda) warn.push(`CUDA filter 사용 불가 (${c.cuda_error || "probe failed"})`);
+    if (c.nvdec === false) warn.push(`NVDEC 사용 불가 (${c.nvdec_error || "probe failed"})`);
     $("#caps-warn").hidden = !warn.length;
     $("#caps-warn").textContent = warn.length ? `이 시스템에서 ${warn.join(" / ")} — libx264 / CPU filter 를 사용하세요.` : "";
 
@@ -88,6 +89,7 @@ const EncoderHelper = {
       this.setSpec(cfg.helper);
     } else {
       setRadio("in_type", "decklink");
+      $("#in-nvdec").checked = false;
       this.applyDefaults();
       $("#out-transport").value = this.meta.rtsp_transport || "udp";
     }
@@ -373,6 +375,7 @@ const EncoderHelper = {
     const spec = {
       input: {
         type: inType,
+        nvdec: ["mediamtx", "custom"].includes(inType) && !$("#in-nvdec").disabled && $("#in-nvdec").checked,
         decklink: {
           device: $("#dl-device").value, format_code: $("#dl-format").value, channels: Number($("#dl-channels").value),
           raw_format: $("#dl-raw").value, video_input: $("#dl-vin").value,
@@ -418,6 +421,7 @@ const EncoderHelper = {
   setSpec(s) {
     const i = s.input || {};
     setRadio("in_type", i.type || "decklink");
+    $("#in-nvdec").checked = !!i.nvdec;
     const d = i.decklink || {};
     if (d.device) $("#dl-device").value = d.device;
     if (d.format_code) $("#dl-format").value = d.format_code;
@@ -513,6 +517,16 @@ const EncoderHelper = {
     const outType = radio("out_type");
     $$(".in-pane").forEach((p) => { p.hidden = p.dataset.pane !== inType; });
     $$(".out-pane").forEach((p) => { p.hidden = p.dataset.pane !== outType; });
+    // NVDEC only for compressed inputs, and only when the video is decoded at all
+    const nvd = $("#in-nvdec");
+    const nvdecInput = ["mediamtx", "custom"].includes(inType);
+    $("#nvdec-row").hidden = !nvdecInput;
+    const nvdecOk = this.meta?.caps?.nvdec ?? this.meta?.caps?.cuda;
+    nvd.disabled = !nvdecOk || ["copy", "none"].includes($("#v-codec").value);
+    $("#nvdec-note").textContent = !nvdecOk ? "NVDEC 사용 불가"
+      : ["copy", "none"].includes($("#v-codec").value) ? "video copy/none 에서는 디코딩하지 않음"
+      : nvd.checked && $("#v-codec").value !== "h264_nvenc" ? "libx264 → GPU 디코딩 후 hwdownload"
+      : "";
     $("#out-transport-row").hidden = !outType.startsWith("mediamtx");
     const codec = $("#v-codec").value;
     $(".v-enc").hidden = codec === "copy" || codec === "none";
