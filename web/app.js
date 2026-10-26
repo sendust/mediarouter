@@ -641,8 +641,8 @@ function renderMtx(m) {
         : '<div class="r">↳ reader 없음</div>';
       const href = `${App.whepBase()}/${encodeURIComponent(p.name)}/`;
       return `<div class="mtx-path"><a class="n mtx-open" href="${esc(href)}" target="_blank" rel="noopener" data-path="${esc(p.name)}" title="WebRTC 로 새 창에서 보기 (mediamtx player)">${esc(p.name)} <span class="ext">↗</span></a> <span class="badge ${p.ready ? "on" : "off"}">${p.ready ? "ready" : "not ready"}</span>` +
-        `<div class="mtx-rate"><span title="publisher → mediamtx">▼ ${p.bps_in != null ? fmt.bps(p.bps_in) : "-"}</span>` +
-        `<span title="mediamtx → readers (합계)">▲ ${p.bps_out != null ? fmt.bps(p.bps_out) : "-"}</span></div>` +
+        `<div class="mtx-rate"><span title="source → mediamtx">→ ${p.bps_in != null ? fmt.bps(p.bps_in) : "-"}</span>` +
+        `<span title="mediamtx → readers (합계)">← ${p.bps_out != null ? fmt.bps(p.bps_out) : "-"}</span></div>` +
         `<div class="muted small">${esc(tracks)}</div>` +
         `<div class="small">source: ${esc(p.source_type || "-")} ${esc(p.source_remote || "")} · in ${fmt.bytes(p.bytes_in)} · out ${fmt.bytes(p.bytes_out)}</div>${readers}</div>`;
     }).join("");
