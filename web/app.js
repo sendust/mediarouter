@@ -576,6 +576,15 @@ function renderSystem(s) {
   }).join("");
 }
 
+// path name in the mediamtx list -> mediamtx's own WebRTC player in a separate window
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("a.mtx-open");
+  if (!a || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey) return;  // modifier keys: let the browser open a tab
+  e.preventDefault();
+  const w = window.open(a.href, `mtx_${a.dataset.path}`, "popup,width=1000,height=600");
+  if (w) w.focus(); else window.open(a.href, "_blank", "noopener");  // popup blocked -> plain new tab
+});
+
 function renderMtx(m) {
   App.mtx = m;
   const info = {};
@@ -595,7 +604,8 @@ function renderMtx(m) {
       const readers = p.readers.length
         ? p.readers.map((r) => `<div class="r">↳ ${esc(r.type)} ${esc(r.remote)} ${esc(r.transport || "")}</div>`).join("")
         : '<div class="r">↳ reader 없음</div>';
-      return `<div class="mtx-path"><span class="n">${esc(p.name)}</span> <span class="badge ${p.ready ? "on" : "off"}">${p.ready ? "ready" : "not ready"}</span>` +
+      const href = `${App.whepBase()}/${encodeURIComponent(p.name)}/`;
+      return `<div class="mtx-path"><a class="n mtx-open" href="${esc(href)}" target="_blank" rel="noopener" data-path="${esc(p.name)}" title="WebRTC 로 새 창에서 보기 (mediamtx player)">${esc(p.name)} <span class="ext">↗</span></a> <span class="badge ${p.ready ? "on" : "off"}">${p.ready ? "ready" : "not ready"}</span>` +
         `<div class="muted small">${esc(tracks)}</div>` +
         `<div class="small">source: ${esc(p.source_type || "-")} ${esc(p.source_remote || "")} · in ${fmt.bytes(p.bytes_in)} · out ${fmt.bytes(p.bytes_out)}</div>${readers}</div>`;
     }).join("");

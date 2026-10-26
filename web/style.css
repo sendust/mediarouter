@@ -136,6 +136,10 @@ pre { margin: 4px 0; }
 .mtx-paths { display: flex; flex-direction: column; gap: 6px; max-height: 520px; overflow: auto; }
 .mtx-path { border: 1px solid var(--border); border-radius: 4px; padding: 5px 7px; font-size: 12px; }
 .mtx-path .n { font-family: var(--mono); font-weight: 600; }
+a.mtx-open { color: var(--text); text-decoration: none; cursor: pointer; }
+a.mtx-open:hover { color: #7fd4ff; text-decoration: underline; }
+a.mtx-open .ext { font-size: 10px; color: var(--muted); }
+a.mtx-open:hover .ext { color: #7fd4ff; }
 .mtx-path .r { font-family: var(--mono); font-size: 11px; color: var(--muted); }
 .bar { height: 4px; background: #262c35; border-radius: 2px; overflow: hidden; margin-top: 2px; }
 .bar i { display: block; height: 100%; background: var(--accent); }
