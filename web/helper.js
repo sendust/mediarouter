@@ -35,6 +35,15 @@ const EncoderHelper = {
       if (d) $("#op-base").value = d.suggest_base;
       this.refresh();
     });
+    // extra audio paths: a plain click toggles the option (no Ctrl needed to add or to deselect)
+    $("#mx-extra").addEventListener("mousedown", (e) => {
+      const o = e.target.closest("option");
+      if (!o || o.disabled || e.button !== 0) return;
+      e.preventDefault();
+      o.selected = !o.selected;
+      $("#mx-extra").focus();
+      $("#mx-extra").dispatchEvent(new Event("change", { bubbles: true }));
+    });
     $("#ts-standard").addEventListener("change", () => { $("#ts-custom").hidden = $("#ts-standard").value !== "custom"; this.refresh(); });
     $("#dl-query").addEventListener("click", () => this.queryFormats());
     $("#mx-refresh").addEventListener("click", () => this.loadPaths());
