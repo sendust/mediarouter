@@ -24,7 +24,9 @@ DeckLink ─ ffmpeg ─▶ mediamtx (sdiN_va12, sdiN_a34 …) ─ ffmpeg ─▶ 
   - 비디오: h264_nvenc / libx264 / stream copy / none, CPU 또는 CUDA deinterlace(bwdif/yadif/estdif)·scale, GOP, B-frame
   - 출력: mediamtx (N audio stream — 스테레오 쌍마다 별도 path), mediamtx path, 외부 URL 여러개 (tee), null
   - mediamtx 출력의 RTSP 전송방식 UDP / TCP 인코더별 선택 (기본값 config.json `mediamtx.rtsp_transport`)
-  - 출력 프리셋: UDP 멀티캐스트 (MPEG-TS) — group / port / TTL / 송출 NIC(localaddr) 입력, `pkt_size=1316`
+  - 출력 프리셋: 멀티캐스트 (MPEG-TS) — 기본 RTP (`-f rtp_mpegts rtp://…`), UDP (`-f mpegts udp://…?pkt_size=1316`) 선택,
+    group / port / TTL / 송출 NIC(localaddr), RTP 는 Pro-MPEG FEC (`fec=prompeg=l=L:d=D`, L·D 4–20, L×D ≤ 100,
+    column FEC port+2 / row FEC port+4, RTCP port+1 — 같은 group 에서는 포트를 6 이상 띄울 것)
 - **모니터 카드** — mediamtx path 들을 WebRTC 로 받아 영상 + 수평 오디오 레벨미터 (dBFS, peak hold)
   - path 라벨 클릭시 해당 오디오 청취
   - path 정보: codec/profile/해상도/채널, path 입력 bitrate, reader 수, 트랙별 fps·bitrate·패킷손실

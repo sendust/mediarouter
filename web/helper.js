@@ -192,29 +192,70 @@ const EncoderHelper = {
   addMcast(mc = {}) {
     this.localIps ||= [];
     const used = $$("#ou-list .url-row.mc").length;
-    const m = { group: "239.1.1." + (1 + used), port: 5000, ttl: 16, localaddr: "", ...mc };
+    // proto: rows saved before RTP became the default have no proto and were UDP
+    const m = { proto: "rtp", group: "239.1.1." + (1 + used), port: 5000, ttl: 16, localaddr: "",
+                fec: false, l: 10, d: 10, ...mc };
+    if (!mc.proto && mc.group) m.proto = "udp";
     const row = document.createElement("div");
     row.className = "url-row mc";
     const ifOpts = [`<option value="">NIC: default route</option>`]
       .concat(this.localIps.map((x) => `<option value="${esc(x.ip)}">${esc(x.nic)} ${esc(x.ip)}</option>`));
     if (m.localaddr && !this.localIps.some((x) => x.ip === m.localaddr)) ifOpts.push(`<option value="${esc(m.localaddr)}">${esc(m.localaddr)}</option>`);
-    row.innerHTML = `<span class="mc-tag" title="MPEG-TS over UDP multicast">TS mcast</span>` +
+    row.innerHTML =
+      `<select class="mc-proto" title="RTP: -f rtp_mpegts rtp://… (RTP 시퀀스로 손실 확인, Pro-MPEG FEC 가능) / UDP: -f mpegts udp://… (pkt_size 1316)">` +
+        `<option value="rtp">RTP-TS</option><option value="udp">UDP-TS</option></select>` +
       `<input class="mc-group" placeholder="239.1.1.1" value="${esc(m.group)}" title="multicast group (224.0.0.0 – 239.255.255.255)">` +
       `<span>:</span><input class="mc-port" type="number" min="1" max="65535" value="${esc(m.port)}" title="port">` +
       `<label>TTL <input class="mc-ttl" type="number" min="1" max="255" value="${esc(m.ttl)}"></label>` +
       `<select class="mc-if" title="송출 NIC (localaddr)">${ifOpts.join("")}</select>` +
-      `<button type="button" class="btn ghost sm">✕</button>`;
+      `<button type="button" class="btn ghost sm">✕</button>` +
+      `<label class="mc-fecw" title="Pro-MPEG CoP3 (SMPTE 2022-1) FEC. column FEC → port+2, row FEC → port+4. L×D ≤ 100, 각 4–20">` +
+        `<input type="checkbox" class="mc-fec"> FEC (prompeg) L <input class="mc-l" type="number" min="4" max="20" value="${esc(m.l)}">` +
+        ` D <input class="mc-d" type="number" min="4" max="20" value="${esc(m.d)}"></label>`;
+    $(".mc-proto", row).value = m.proto;
     $(".mc-if", row).value = m.localaddr;
+    $(".mc-fec", row).checked = !!m.fec;
+    const sync = () => {
+      const rtp = $(".mc-proto", row).value === "rtp";
+      $(".mc-fecw", row).hidden = !rtp;
+      $$(".mc-l, .mc-d", row).forEach((i) => { i.disabled = !$(".mc-fec", row).checked; });
+    };
+    row.addEventListener("change", sync);
+    sync();
     $("button", row).onclick = () => { row.remove(); this.refresh(); };
     $("#ou-list").append(row);
   },
   mcastOutput(row) {
-    const mc = { group: $(".mc-group", row).value.trim(), port: Number($(".mc-port", row).value) || 5000,
-                 ttl: Number($(".mc-ttl", row).value) || 16, localaddr: $(".mc-if", row).value };
+    const mc = { proto: $(".mc-proto", row).value, group: $(".mc-group", row).value.trim(),
+                 port: Number($(".mc-port", row).value) || 5000, ttl: Number($(".mc-ttl", row).value) || 16,
+                 localaddr: $(".mc-if", row).value, fec: $(".mc-fec", row).checked,
+                 l: Number($(".mc-l", row).value) || 10, d: Number($(".mc-d", row).value) || 10 };
     if (!mc.group) return null;
-    const q = [`pkt_size=1316`, `ttl=${mc.ttl}`];
+    const q = [`ttl=${mc.ttl}`];
     if (mc.localaddr) q.push(`localaddr=${mc.localaddr}`);
-    return { type: "url", url: `udp://${mc.group}:${mc.port}?${q.join("&")}`, format: "mpegts", preset: "udp_mcast", mc };
+    if (mc.proto === "udp") {
+      q.unshift("pkt_size=1316");   // 7 TS packets per datagram
+      return { type: "url", url: `udp://${mc.group}:${mc.port}?${q.join("&")}`, format: "mpegts", preset: "mcast", mc };
+    }
+    if (mc.fec) q.push(`fec=prompeg=l=${mc.l}:d=${mc.d}`);
+    return { type: "url", url: `rtp://${mc.group}:${mc.port}?${q.join("&")}`, format: "rtp_mpegts", preset: "mcast", mc };
+  },
+  mcastProblems() {
+    const out = [];
+    const rows = $$("#ou-list .url-row.mc").map((r) => this.mcastOutput(r)?.mc).filter(Boolean);
+    const bad = rows.map((m) => m.group).filter((g) => !/^2(2[4-9]|3\d)\.\d+\.\d+\.\d+$/.test(g));
+    if (bad.length) out.push(`${bad.join(", ")} 은 멀티캐스트 주소(224.0.0.0 – 239.255.255.255)가 아닙니다.`);
+    rows.filter((m) => m.proto === "rtp" && m.fec).forEach((m) => {
+      if (m.l < 4 || m.l > 20 || m.d < 4 || m.d > 20 || m.l * m.d > 100)
+        out.push(`FEC L=${m.l} D=${m.d}: L, D 는 4–20, L×D ≤ 100 이어야 합니다 (ffmpeg 가 출력을 열지 못함).`);
+    });
+    // RTP uses port+1 (RTCP), FEC port+2 / port+4: same group with ports closer than that collide
+    const span = (m) => (m.proto === "rtp" ? (m.fec ? 5 : 2) : 1);
+    rows.forEach((a, i) => rows.slice(i + 1).forEach((b) => {
+      if (a.group === b.group && Math.abs(a.port - b.port) < Math.max(span(a), span(b)))
+        out.push(`${a.group}:${a.port} 와 :${b.port} 포트가 겹칩니다 (RTP 는 port+1 RTCP, FEC 는 port+2/+4 사용).`);
+    }));
+    return out;
   },
 
   /* CUDA filters exist only on the NVENC path: carry the choice over to the CPU equivalent */
@@ -456,7 +497,7 @@ const EncoderHelper = {
     $("#op-base").value = sk.base || "sdi1";
     $("#ou-list").innerHTML = "";
     (s.outputs || []).forEach((o) => {
-      if (o.type === "url" && o.preset === "udp_mcast") this.addMcast(o.mc);
+      if (o.type === "url" && ["mcast", "udp_mcast"].includes(o.preset)) this.addMcast(o.mc);
       else if (o.type === "url") this.addUrl(o.url, o.format || "auto");
       if (o.type === "mediamtx") $("#om-path").value = o.path;
     });
@@ -557,9 +598,8 @@ const EncoderHelper = {
     $$(".a-ln input[type=number]").forEach((i) => { i.disabled = !$("#a-ln").checked; });
     const notes = [];
     if (outType === "url") {
-      const bad = $$("#ou-list .url-row.mc .mc-group").map((i) => i.value.trim()).filter((g) => g && !/^2(2[4-9]|3\d)\.\d+\.\d+\.\d+$/.test(g));
       if ($$("#ou-list .url-row.mc").length && $("#a-codec").value === "opus") notes.push("MPEG-TS 수신기(IRD, VLC 외 다수)는 Opus 를 지원하지 않는 경우가 많습니다 — AAC 권장.");
-      if (bad.length) notes.push(`${bad.join(", ")} 은 멀티캐스트 주소(224.0.0.0 – 239.255.255.255)가 아닙니다.`);
+      notes.push(...this.mcastProblems());
     }
     if (pairs) notes.push("각 스테레오 쌍이 개별 mediamtx path 로 전송됩니다 (L/R 선택 불필요).");
     const toMtx = outType.startsWith("mediamtx");

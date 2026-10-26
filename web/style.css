@@ -183,6 +183,10 @@ a.mtx-open:hover .ext { color: #7fd4ff; }
 .url-row.mc .btn { width: auto; }
 .ou-btns { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0; }
 .ou-btns .btn { width: auto; }
+.url-row.mc .mc-proto { width: 6.5em; }
+.url-row.mc .mc-fecw { flex-basis: 100%; justify-content: flex-start; gap: 6px; padding-left: 2px; font-size: 12px; color: var(--muted); }
+.url-row.mc .mc-fecw input { flex: none; }
+.url-row.mc .mc-l, .url-row.mc .mc-d { width: 3.8em; }
 .mc-tag { font-size: 11px; padding: 1px 6px; border: 1px solid #7fd4ff; color: #7fd4ff; border-radius: 3px; white-space: nowrap; }
 .chips { display: inline-flex; gap: 4px; flex-wrap: wrap; }
 .path-pick { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow: auto; border: 1px solid var(--border); border-radius: 4px; padding: 4px; }
