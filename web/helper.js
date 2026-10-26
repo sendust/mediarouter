@@ -370,6 +370,16 @@ const EncoderHelper = {
     return out;
   },
 
+  /* index (in mxPaths order) of the first path that carries a video track */
+  mxVideoInput() {
+    const i = this.mxPaths().findIndex((p) => {
+      if (this.probed && this.probed.path === p) return this.probed.streams.some((s) => s.type === "video");
+      const info = (this.paths || []).find((x) => x.name === p);
+      return info && info.tracks.some((t) => VIDEO_CODECS.includes(t.codec));
+    });
+    return Math.max(0, i);
+  },
+
   mxPaths() {
     const main = $("#mx-path").value;
     const extra = [...$("#mx-extra").selectedOptions].map((o) => o.value).filter((v) => v && v !== main);
@@ -421,7 +431,7 @@ const EncoderHelper = {
           device: $("#dl-device").value, format_code: $("#dl-format").value, channels: Number($("#dl-channels").value),
           raw_format: $("#dl-raw").value, video_input: $("#dl-vin").value,
         },
-        mediamtx: { paths: this.mxPaths(), transport: $("#mx-transport").value, interlaced: $("#mx-interlaced").checked },
+        mediamtx: { paths: this.mxPaths(), video_input: this.mxVideoInput(), transport: $("#mx-transport").value, interlaced: $("#mx-interlaced").checked },
         testsrc: {
           source: $("#ts-source").value, standard: $("#ts-standard").value, size: $("#ts-size").value,
           rate: $("#ts-rate").value, interlaced: $("#ts-inter").checked,

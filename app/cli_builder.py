@@ -118,13 +118,18 @@ class Builder:
             transport = m.get("transport") or self.app.get("rtsp_transport", "udp")
             paths = m.get("paths") or ([m["path"]] if m.get("path") else [])
             layout = self.spec.get("audio_layout") or []
+            # the path carrying video need not be the first one (e.g. main = an audio-only pair path)
+            vi = int(m.get("video_input") or 0)
+            vi = vi if 0 <= vi < len(paths) else 0
             for n, path in enumerate(paths):
                 args = ["-rtsp_transport", transport, "-timeout", "5000000"] + self._udp_buf(transport)
                 if n == 0:
-                    args += hw + custom_in
+                    args += custom_in
+                if n == vi:
+                    args += hw
                 args += ["-i", self._rtsp_url(path)]
                 i = self._add_input(args)
-                if n == 0:
+                if n == vi:
                     self.video_label = f"{i}:v:0"
             # audio layout comes from probing: [{"input": 0, "index": 0, "channels": 2}, ...]
             self.audio_streams = [(f"{a.get('input', 0)}:a:{a.get('index', 0)}", int(a.get("channels", 2)))
