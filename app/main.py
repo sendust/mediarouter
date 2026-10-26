@@ -7,10 +7,10 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import Body, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import helpers
+from . import helpers, status
 from .cli_builder import DECKLINK_FORMATS, LAVFI_VIDEO_SOURCES, VIDEO_STANDARDS, build_cli, suggest_pair_paths
 from .config import ConfigStore
 from .fflog import FFReportWatchdog
@@ -30,6 +30,7 @@ log = get_logger("main")
 manager = EncoderManager(store, BASE_DIR)
 mtx = MediaMTXPoller(store)
 sysinfo = SysInfo()
+STARTED_AT = time.time()
 ffreport = FFReportWatchdog(manager, store.section("ffreport_watchdog"))
 
 
@@ -76,6 +77,18 @@ def encoders_payload(cached=True):
         _payload_cache["data"] = [{"config": e.cfg, "status": e.status()} for e in manager.all()]
         _payload_cache["ts"] = now
     return _payload_cache["data"]
+
+
+# ------------------------------------------------------------------ status
+@app.get("/api/status")
+def api_status(format: str = "json"):
+    """Backend health + system + encoder summary for external monitoring.
+    ?format=text returns a short plain-text version (e.g. for a Telegram message)."""
+    doc = status.build(sysinfo.snapshot, mtx.snapshot, encoders_payload(), store.items("monitors"),
+                       BASE_DIR, STARTED_AT)
+    if format == "text":
+        return PlainTextResponse(status.to_text(doc))
+    return doc
 
 
 # ------------------------------------------------------------------ pages

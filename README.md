@@ -126,6 +126,7 @@ journalctl -u mediarouter -f              # 콘솔 출력 (logs/backend.log 에�
 | `app/mediamtx.py` | mediamtx API poller (path, codec 정보, 입력 bitrate, publisher/reader 의 remote 주소) |
 | `app/sysinfo.py` | hostname, IP, CPU, RAM, NIC TX/RX, ffmpeg 프로세스 수 |
 | `app/logger.py` | 콘솔 + `logs/backend.log` (rotate) + 최근 1000건 ring buffer |
+| `app/status.py` | `/api/status` 상태 요약 / health 판정 / text 출력 |
 | `app/config.py` | config.json 로드/저장 (atomic write, 누락 키는 기본값으로 채워 기록) |
 | `web/index.html`, `app.js` | UI (vanilla JS), 인코더/모니터 카드, 시스템, 로그 |
 | `web/helper.js` | Encoder / Monitor helper 대화창 |
@@ -170,9 +171,48 @@ journalctl -u mediarouter -f              # 콘솔 출력 (logs/backend.log 에�
 | `POST /api/encoders/order`, `POST /api/monitors/order` | 카드 순서 (`{"ids": [...]}`) |
 | `GET/POST /api/monitors`, `PATCH/DELETE /api/monitors/{id}` | 모니터 |
 | `GET /api/helper/*` | helper 용 (DeckLink 장치/포맷, mediamtx path, probe, CLI build) |
+| `GET /api/status` (`?format=text`) | **외부 모니터링용 상태 요약** (아래 참고) |
 | `GET /api/system`, `GET /api/logs`, `GET /events` (SSE) | 상태 |
 
 인증은 없습니다. 사내망에서만 사용하세요.
+
+### 상태 요약 `GET /api/status`
+
+Telegram bot 등 외부 감시용. `health` (`ok` / `warn` / `error`) 와 `issues` 만 보면 되도록 판정까지 해서 돌려줍니다.
+
+```
+curl -s http://<host>:8080/api/status                 # JSON
+curl -s http://<host>:8080/api/status?format=text     # 사람이 읽는 짧은 텍스트 (메시지 전송용)
+```
+
+| 키 | 내용 |
+|---|---|
+| `health` | 전체 판정 — 가장 나쁜 issue 의 level |
+| `issues[]` | `{level, message}` — 판정 이유 |
+| `summary` | 인코더 상태별 개수, mediamtx 접속 여부, CPU%, 가용 메모리% |
+| `system` | hostname, 시간, 백엔드 uptime, CPU/load, 메모리, 디스크, ffmpeg 프로세스 수, NIC 별 IP·rx/tx bps |
+| `mediamtx` | API 접속 여부, path 수 (ready/전체), reader 수 |
+| `encoders[]` | id, title, state, health, issues, uptime, restarts, fps, speed, `bitrate_bps` (`bitrate_source`: ffmpeg / mediamtx), drop/dup, CPU/RSS, 코덱, 송출 path, 마지막 종료코드/사유/오류 |
+
+판정 기준 (`app/status.py` 상단 상수):
+
+- **error** — mediamtx API 접속 불가, 인코더가 `error` / `restarting` 상태
+- **warn** — autostart 인코더가 정지 상태, 속도저하(SLOW), 실행중 최근 60초 내 오류,
+  CPU ≥ 90%, 가용 메모리 < 10%, 디스크 ≥ 90%, 켜진 모니터의 path 가 mediamtx 에 없음
+
+text 예시:
+
+```
+✅ mediarouter nagoya1 — OK
+2026-10-26T13:16:58+0900 · backend up 0d 1h 1m
+CPU 10% · RAM avail 82.3% · disk 23.8% · ffmpeg 3
+mediamtx OK · paths 8/8 · readers 6
+encoders total 3, running 3
+✅ SDI1_INPUT: running · fps 59.94 · speed 1.0x · 25.22Mb/s · restarts 0
+✅ life testsrc: running · fps 30.01 · speed 1.0x · 8.71Mb/s · restarts 0
+```
+
+감시 측에서는 주기적으로 조회해 `health` 가 바뀔 때만 알리는 방식을 권장합니다 (상태가 계속 같으면 메시지 생략).
 
 ## 동작 메모
 
