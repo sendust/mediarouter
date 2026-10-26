@@ -309,12 +309,17 @@ class Builder:
         return lbl, self._codec_args(a)
 
     # ------------------------------------------------------------ outputs
+    def _out_transport(self):
+        """RTSP transport for publishing: per encoder (helper sink) or the config default."""
+        t = (self.spec.get("sink") or {}).get("rtsp_transport")
+        return t if t in ("udp", "tcp") else self.app.get("rtsp_transport", "udp")
+
     def _out_args(self, url, fmt=None):
         custom_out = shlex.split(self.spec.get("custom", {}).get("output", "") or "")
         fmt = fmt or _fmt_for_url(url)
         args = list(custom_out)
         if fmt == "rtsp":
-            transport = self.app.get("rtsp_transport", "udp")
+            transport = self._out_transport()
             args += ["-f", "rtsp", "-rtsp_transport", transport] + self._udp_buf(transport)
         elif fmt:
             args += ["-f", fmt]
@@ -377,7 +382,7 @@ class Builder:
                     if fmt:
                         opts.insert(0, f"f={fmt}")
                     if fmt == "rtsp":
-                        transport = self.app.get("rtsp_transport", "udp")
+                        transport = self._out_transport()
                         opts.append(f"rtsp_transport={transport}")
                         if self._udp_buf(transport):
                             opts.append(f"buffer_size={int(self.app['udp_buffer_size'])}")

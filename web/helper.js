@@ -89,6 +89,7 @@ const EncoderHelper = {
     } else {
       setRadio("in_type", "decklink");
       this.applyDefaults();
+      $("#out-transport").value = this.meta.rtsp_transport || "udp";
     }
     $("#e-title").value = cfg ? cfg.title : "";
     $("#e-comment").value = cfg ? cfg.comment : "";
@@ -385,7 +386,8 @@ const EncoderHelper = {
         custom: { args: $("#cu-args").value, layout: $("#cu-layout").value },
       },
       audio_layout: this.layout,
-      sink: { type: outType, base: $("#op-base").value, pairs: $$("#op-pairs input:checked").map((i) => Number(i.value)) },
+      sink: { type: outType, base: $("#op-base").value, pairs: $$("#op-pairs input:checked").map((i) => Number(i.value)),
+              ...(outType.startsWith("mediamtx") ? { rtsp_transport: $("#out-transport").value } : {}) },
       outputs: [],
       video: {
         codec: $("#v-codec").value,
@@ -446,6 +448,7 @@ const EncoderHelper = {
 
     const sk = s.sink || {};
     setRadio("out_type", sk.type || "mediamtx_pairs");
+    $("#out-transport").value = sk.rtsp_transport || this.meta.rtsp_transport || "udp";
     $("#op-base").value = sk.base || "sdi1";
     $("#ou-list").innerHTML = "";
     (s.outputs || []).forEach((o) => {
@@ -510,6 +513,7 @@ const EncoderHelper = {
     const outType = radio("out_type");
     $$(".in-pane").forEach((p) => { p.hidden = p.dataset.pane !== inType; });
     $$(".out-pane").forEach((p) => { p.hidden = p.dataset.pane !== outType; });
+    $("#out-transport-row").hidden = !outType.startsWith("mediamtx");
     const codec = $("#v-codec").value;
     $(".v-enc").hidden = codec === "copy" || codec === "none";
     // NVENC path: CUDA filters replace the CPU ones (CPU row only as a fallback when CUDA is unusable)

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MEDIAROUTER by sendust</title>
-<link rel="stylesheet" href="/static/style.css?v=26">
+<link rel="stylesheet" href="/static/style.css?v=27">
 </head>
 <body>
 <header class="topbar">
@@ -203,6 +203,10 @@
           <label><input type="radio" name="out_type" value="url"> 외부 URL</label>
           <label><input type="radio" name="out_type" value="null"> null (test)</label>
         </div>
+        <div class="row" id="out-transport-row">
+          <label title="mediamtx 로 publish 할 때의 RTSP 전송방식. UDP 는 지연이 적지만 손실 가능, TCP 는 손실 없음(재전송) / 지연·버퍼 증가 가능">RTSP 전송
+            <select id="out-transport"><option value="udp">UDP</option><option value="tcp">TCP</option></select></label>
+        </div>
         <div class="out-pane" data-pane="mediamtx_pairs">
           <label>Base name <input id="op-base" value="sdi1" class="sm"></label>
           <div id="op-pairs" class="pairs"></div>
@@ -333,9 +337,9 @@
   </form>
 </dialog>
 
-<script src="/static/reader.js?v=26"></script>
-<script src="/static/meter.js?v=26"></script>
-<script src="/static/app.js?v=26"></script>
-<script src="/static/helper.js?v=26"></script>
+<script src="/static/reader.js?v=27"></script>
+<script src="/static/meter.js?v=27"></script>
+<script src="/static/app.js?v=27"></script>
+<script src="/static/helper.js?v=27"></script>
 </body>
 </html>
