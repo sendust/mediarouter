@@ -301,6 +301,24 @@ class EncoderCard {
     this.schedVis();
     if (!this.cliDirty && document.activeElement !== this.cli) this.cli.value = cfg.cli || "";
   }
+  /* ffmpeg reports bitrate=N/A when the muxer has no byte count (rtsp, tee).
+     For outputs published to the local mediamtx, use the path's inbound rate instead. */
+  bitrate(p) {
+    this.bitrateTip = "";
+    if (p.bitrate && p.bitrate !== "N/A") return p.bitrate;
+    if (this.cfg.cli && App.mtx?.ok) {
+      const paths = new Set();
+      for (const m of this.cfg.cli.matchAll(/(-i\s+['"]?)?rtsps?:\/\/[^\s'"|\/]+\/([^\s'"|?]+)/g)) if (!m[1]) paths.add(m[2]);  // outputs only
+      const live = [...paths].filter((n) => App.pathInfo[n]?.bps_in != null);
+      if (live.length) {
+        this.bitrateTip = `ffmpeg 가 이 출력(rtsp/tee)의 bitrate 를 제공하지 않아 mediamtx 수신량으로 표시: ${live.join(", ")}`;
+        return "≈" + fmt.bps(live.reduce((a, n) => a + App.pathInfo[n].bps_in, 0));
+      }
+    }
+    if (p.bitrate === "N/A") this.bitrateTip = "ffmpeg 가 이 출력 형식(rtsp/tee 등)의 bitrate 를 제공하지 않습니다";
+    return p.bitrate ?? "-";
+  }
+
   applyStatus(st) {
     const badge = $(".state", this.el);
     badge.textContent = st.state;
@@ -323,7 +341,7 @@ class EncoderCard {
       ["fps", p.fps ?? "-"],
       ["frame", p.frame ?? "-"],
       ["speed", st.speed_now != null ? `${st.speed_now.toFixed(2)}x` : p.speed ?? "-"],
-      ["bitrate", p.bitrate ?? "-"],
+      ["bitrate", this.bitrate(p)],
       ["drop/dup", p.drop_frames != null ? `${p.drop_frames}/${p.dup_frames}` : "-"],
       ["out time", p.out_time ? p.out_time.split(".")[0] : "-"],
       ["cpu", st.cpu != null ? st.cpu.toFixed(0) + "%" : "-"],
@@ -334,7 +352,7 @@ class EncoderCard {
       ["fflog", fmt.bytes(st.fflog_size)],
     ];
     if (st.restart_in != null) cells.splice(1, 1, ["restart in", st.restart_in.toFixed(1) + "s"]);
-    $(".stats", this.el).innerHTML = cells.map(([k, v]) => `<div><span>${k}</span><b title="${esc(v)}">${esc(v)}</b></div>`).join("");
+    $(".stats", this.el).innerHTML = cells.map(([k, v]) => `<div><span>${k}</span><b title="${esc(k === "bitrate" ? this.bitrateTip || v : v)}">${esc(v)}</b></div>`).join("");
     const err = $(".err", this.el);
     let msg = ["error", "restarting"].includes(st.state) ? st.last_reason : "";
     if (st.last_error) msg = (msg ? msg + " — " : "") + `${st.last_error}  (${fmt.dur(st.last_error_age)} 전)`;
