@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MEDIAROUTER by sendust</title>
-<link rel="stylesheet" href="/static/style.css?v=36">
+<link rel="stylesheet" href="/static/style.css?v=37">
 </head>
 <body>
 <header class="topbar">
@@ -236,7 +236,7 @@
 
       <fieldset>
         <legend>Video</legend>
-        <label>Codec <select id="v-codec"><option value="h264_nvenc">h264_nvenc</option><option value="libx264">libx264 (h264)</option><option value="copy">stream copy</option><option value="none">none</option></select></label>
+        <label>Codec <select id="v-codec"><option value="h264_nvenc">h264_nvenc</option><option value="hevc_nvenc">hevc_nvenc (h265)</option><option value="libx264">libx264 (h264)</option><option value="copy">stream copy</option><option value="none">none</option></select></label>
         <div class="v-enc">
           <div class="row cuda-only">
             <label>CUDA deinterlace <select id="f-cuda-deint"><option value="">-</option><option>bwdif_cuda</option><option>yadif_cuda</option></select></label>
@@ -346,9 +346,9 @@
   </form>
 </dialog>
 
-<script src="/static/reader.js?v=36"></script>
-<script src="/static/meter.js?v=36"></script>
-<script src="/static/app.js?v=36"></script>
-<script src="/static/helper.js?v=36"></script>
+<script src="/static/reader.js?v=37"></script>
+<script src="/static/meter.js?v=37"></script>
+<script src="/static/app.js?v=37"></script>
+<script src="/static/helper.js?v=37"></script>
 </body>
 </html>

@@ -142,6 +142,11 @@ def capabilities(ffmpeg):
         base = [ffmpeg, "-hide_banner", "-v", "error", "-f", "lavfi", "-i", "color=s=1280x720:d=0.2"]
         rc, _, err = _run(base + ["-frames:v", "1", "-c:v", "h264_nvenc", "-f", "null", "-"], timeout=20)
         nvenc, nvenc_err = rc == 0, "" if rc == 0 else _last_line(err)
+        rc, _, err = _run(base + ["-frames:v", "1", "-c:v", "hevc_nvenc", "-f", "null", "-"], timeout=20)
+        hevc, hevc_err = rc == 0, "" if rc == 0 else _last_line(err)
+        # HEVC B-frames need Turing or newer (Pascal e.g. P2200: "No capable devices found")
+        hevc_bf = hevc and _run(base + ["-frames:v", "3", "-c:v", "hevc_nvenc", "-bf", "1", "-f", "null", "-"],
+                                timeout=20)[0] == 0
         nvdec, nvdec_err = _nvdec_probe(ffmpeg)
         filters = {}
         for name, chain in (("hwupload_cuda+scale_cuda", "format=nv12,hwupload_cuda,scale_cuda=640:360"),
@@ -151,7 +156,8 @@ def capabilities(ffmpeg):
             filters[name] = "" if rc == 0 else _last_line(err)
         cuda = filters["hwupload_cuda+scale_cuda"] == ""
         _caps = {"nvenc": nvenc, "nvdec": nvdec, "cuda": cuda,
-                 "nvenc_error": nvenc_err, "nvdec_error": nvdec_err,
+                 "hevc_nvenc": hevc, "hevc_bframes": hevc_bf,
+                 "nvenc_error": nvenc_err, "hevc_nvenc_error": hevc_err, "nvdec_error": nvdec_err,
                  "cuda_error": filters["hwupload_cuda+scale_cuda"],
                  "cuda_filters": {k: v == "" for k, v in filters.items()},
                  "ffmpeg": version, "gpu": gpu}
@@ -161,6 +167,8 @@ def capabilities(ffmpeg):
         log.info("capabilities: GPU %s", gpu)
         lvl = lambda b: logging.INFO if b else logging.WARNING
         log.log(lvl(nvenc), "capabilities: NVENC (h264_nvenc) %s%s", ok(nvenc), f" — {nvenc_err}" if nvenc_err else "")
+        log.log(lvl(hevc), "capabilities: NVENC (hevc_nvenc) %s%s", ok(hevc),
+                f" — {hevc_err}" if hevc_err else "" if hevc_bf else " (no B-frames on this GPU)")
         log.log(lvl(nvdec), "capabilities: NVDEC (hwaccel cuda) %s%s", ok(nvdec), f" — {nvdec_err}" if nvdec_err else "")
         for k, e in filters.items():
             log.log(lvl(not e), "capabilities: CUDA filter %s %s%s", k, ok(not e), f" — {e}" if e else "")

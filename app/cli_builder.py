@@ -40,6 +40,9 @@ LAVFI_VIDEO_SOURCES = [
 # sources that don't accept size= / rate= in the usual way
 _NO_SIZE = {"colorchart"}
 
+# GPU encoders: same preset / tune / rc options, CUDA filter path
+NVENC_CODECS = ("h264_nvenc", "hevc_nvenc")
+
 AUDIO_CODECS = {
     "aac": ["-c:a", "aac"],
     "opus": ["-c:a", "libopus"],
@@ -198,7 +201,9 @@ class Builder:
             cuda.append(f"scale_cuda={f['cuda_resize'].replace('x', ':')}")
         fps = f.get("fps")
 
-        nvenc = codec == "h264_nvenc"
+        nvenc = codec in NVENC_CODECS
+        # HEVC Main 10 is only real 10-bit when fed p010 (8-bit input gives a Main 10 stream with 8-bit samples)
+        ten_bit = codec == "hevc_nvenc" and v.get("profile") == "main10"
         on_gpu = self.nvdec      # NVDEC frames arrive as CUDA surfaces (nv12)
         chain = []
         if on_gpu and (cpu or (not cuda and not nvenc)):
@@ -211,21 +216,28 @@ class Builder:
                 chain.append("scale=interl=1,format=nv12" if f.get("cuda_deint") else "format=nv12")
                 chain.append("hwupload_cuda")
             chain += cuda
+            if ten_bit:
+                if cuda[-1].startswith("scale_cuda="):
+                    chain[-1] += ":format=p010le"
+                else:
+                    chain.append("scale_cuda=format=p010le")
             if fps:
                 chain.append(f"fps={fps}")
             if not nvenc:
                 chain += ["hwdownload", "format=nv12"]
         else:
+            if ten_bit and on_gpu:
+                chain.append("scale_cuda=format=p010le")
             if fps:
                 chain.append(f"fps={fps}")
-            if codec in ("libx264", "h264_nvenc") and not on_gpu:
-                chain.append("format=yuv420p")
+            if (codec == "libx264" or nvenc) and not on_gpu:
+                chain.append("format=p010le" if ten_bit else "format=yuv420p")
 
         self.fc.append(f"[{src}]{','.join(chain) or 'null'}[vout]")
 
         br = v.get("bitrate") or "6M"
         args = ["-c:v", codec]
-        if codec == "h264_nvenc":
+        if nvenc:
             args += ["-preset", v.get("preset") or "p4"]
             if v.get("tune"):
                 args += ["-tune", v["tune"]]

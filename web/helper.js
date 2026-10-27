@@ -3,6 +3,8 @@
 
 const NV_PRESETS = ["p1", "p2", "p3", "p4", "p5", "p6", "p7"];
 const NV_TUNES = ["", "hq", "ll", "ull", "lossless"];
+const isNv = (codec) => codec === "h264_nvenc" || codec === "hevc_nvenc";
+const PROFILES = { h264: ["", "high", "main", "baseline"], hevc_nvenc: ["", "main", "main10"] };
 const X264_PRESETS = ["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"];
 const X264_TUNES = ["", "film", "animation", "grain", "stillimage", "fastdecode"];
 const SIZES = ["", "1920x1080", "1280x720", "960x540", "854x480", "640x360", "3840x2160"];
@@ -85,6 +87,10 @@ const EncoderHelper = {
     const c = this.meta.caps || {};
     const warn = [];
     if (!c.nvenc) warn.push(`NVENC 사용 불가 (${c.nvenc_error || "probe failed"})`);
+    if (c.nvenc && c.hevc_nvenc === false) warn.push(`HEVC NVENC 사용 불가 (${c.hevc_nvenc_error || "probe failed"})`);
+    const hevcOpt = $('#v-codec option[value="hevc_nvenc"]');
+    hevcOpt.disabled = c.hevc_nvenc === false;
+    hevcOpt.textContent = c.hevc_nvenc === false ? "hevc_nvenc (사용 불가)" : "hevc_nvenc (h265)";
     if (!c.cuda) warn.push(`CUDA filter 사용 불가 (${c.cuda_error || "probe failed"})`);
     if (c.nvdec === false) warn.push(`NVDEC 사용 불가 (${c.nvdec_error || "probe failed"})`);
     $("#caps-warn").hidden = !warn.length;
@@ -269,7 +275,7 @@ const EncoderHelper = {
 
   /* CUDA filters exist only on the NVENC path: carry the choice over to the CPU equivalent */
   moveCudaFilters() {
-    const nv = $("#v-codec").value === "h264_nvenc";
+    const nv = isNv($("#v-codec").value);
     const cpuOk = !(nv && this.meta?.caps?.cuda);   // CPU filter row is hidden on the NVENC+CUDA path
     const cd = $("#f-cuda-deint"), cr = $("#f-cuda-resize"), d = $("#f-deint"), sc = $("#f-scale");
     if (!nv) {
@@ -290,7 +296,7 @@ const EncoderHelper = {
     const codec = $("#v-codec").value;
     const p = $("#v-preset").value, t = $("#v-tune").value;
     let html;
-    if (codec === "h264_nvenc") {
+    if (isNv(codec)) {
       const presets = {
         p1: "가장 빠름 · 화질 최저", p2: "매우 빠름", p3: "빠름", p4: "중간 (기본값) · 속도/화질 균형",
         p5: "느림 · 화질 좋음", p6: "더 느림 · 화질 더 좋음", p7: "가장 느림 · 화질 최고",
@@ -306,6 +312,12 @@ const EncoderHelper = {
         `프리셋 자체는 프레임 지연을 거의 늘리지 않습니다 (P2200 1080p 기준 p4~p5 권장, 여러 채널이면 p4 이하).<br>` +
         `<b>tune ${esc(t || "-")}</b>: ${tunes[t] || ""}<br>` +
         `<b>zerolatency</b>: 프레임 재정렬 지연 없이 출력 (B-frame 0 과 함께 사용). 지연을 줄이려면 tune ll/ull + zerolatency + B-frame 0.`;
+      if (codec === "hevc_nvenc") {
+        html += `<br><b>HEVC</b>: 같은 화질에 H.264 보다 비트레이트를 약 30~40% 줄일 수 있음. ` +
+          `profile <b>main10</b> 은 p010 (10-bit) 으로 변환해 인코딩. ` +
+          `브라우저 WebRTC 모니터·플레이어는 HEVC 재생이 제한적이고, RTMP 는 enhanced RTMP 를 지원하는 수신측만 받을 수 있음.` +
+          (this.meta?.caps?.hevc_bframes ? "" : ` 이 GPU 는 HEVC B-frame 을 지원하지 않아 B-frames 는 0 으로 고정됩니다.`);
+      }
     } else if (codec === "libx264") {
       html = `<b>preset ${esc(p)}</b>: ultrafast→veryslow 로 갈수록 화질↑ CPU 부하↑. 라이브는 veryfast~fast 권장.<br>` +
         `<b>tune</b>: film/animation/grain 등은 소스 특성별 화질 튜닝. <b>zerolatency</b> 는 B-frame·lookahead·sliced-thread 설정으로 지연을 최소화 (화질 약간 하락).`;
@@ -318,13 +330,17 @@ const EncoderHelper = {
 
   codecLists() {
     const codec = $("#v-codec").value;
-    const nv = codec === "h264_nvenc";
+    const nv = isNv(codec);
     const p = $("#v-preset").value, t = $("#v-tune").value;
     opts($("#v-preset"), nv ? NV_PRESETS : X264_PRESETS);
     opts($("#v-tune"), nv ? NV_TUNES : X264_TUNES);
     $("#v-preset").value = (nv ? NV_PRESETS : X264_PRESETS).includes(p) ? p : nv ? "p4" : "veryfast";
     $("#v-tune").value = (nv ? NV_TUNES : X264_TUNES).includes(t) ? t : nv ? "ll" : "";
     $$(".nv-only").forEach((e) => { e.hidden = !nv; });
+    const prof = $("#v-profile"), keep = prof.value;
+    const plist = PROFILES[codec] || PROFILES.h264;
+    opts(prof, plist, plist.map((x) => x || "-"));
+    prof.value = plist.includes(keep) ? keep : "";
   },
 
   /* sensible defaults for the chosen input; only for a new encoder or when the input type changes */
@@ -336,7 +352,7 @@ const EncoderHelper = {
     $("#v-codec").value = caps.nvenc ? "h264_nvenc" : "libx264";
     this.codecLists();
     const interlaced = inType === "decklink" || (inType === "testsrc" && ($("#ts-standard").value || "1080i5994").includes("i"));
-    const gpu = caps.cuda && $("#v-codec").value === "h264_nvenc";
+    const gpu = caps.cuda && isNv($("#v-codec").value);
     $("#f-cuda-deint").value = interlaced && gpu ? "bwdif_cuda" : "";
     $("#f-deint").value = interlaced && !gpu ? "bwdif" : "";
     $("#f-cuda-resize").value = "";
@@ -429,7 +445,7 @@ const EncoderHelper = {
 
   getSpec() {
     const inType = radio("in_type");
-    const nv = $("#v-codec").value === "h264_nvenc";
+    const nv = isNv($("#v-codec").value);
     const cpuOk = !(nv && this.meta?.caps?.cuda);   // CPU filter row is hidden on the NVENC+CUDA path
     const outType = radio("out_type");
     const spec = {
@@ -585,14 +601,19 @@ const EncoderHelper = {
     nvd.disabled = !nvdecOk || ["copy", "none"].includes($("#v-codec").value);
     $("#nvdec-note").textContent = !nvdecOk ? "NVDEC 사용 불가"
       : ["copy", "none"].includes($("#v-codec").value) ? "video copy/none 에서는 디코딩하지 않음"
-      : nvd.checked && $("#v-codec").value !== "h264_nvenc" ? "libx264 → GPU 디코딩 후 hwdownload"
+      : nvd.checked && !isNv($("#v-codec").value) ? "libx264 → GPU 디코딩 후 hwdownload"
       : "";
     $("#out-transport-row").hidden = !outType.startsWith("mediamtx");
     const codec = $("#v-codec").value;
     $(".v-enc").hidden = codec === "copy" || codec === "none";
+    const bf = $("#v-bf");
+    const noBf = codec === "hevc_nvenc" && !this.meta?.caps?.hevc_bframes;
+    if (noBf) bf.value = "0";
+    bf.disabled = noBf;
+    bf.title = noBf ? "이 GPU 의 hevc_nvenc 는 B-frame 을 지원하지 않습니다 (Turing 이상 필요)" : "";
     // NVENC path: CUDA filters replace the CPU ones (CPU row only as a fallback when CUDA is unusable)
-    const gpuFilters = codec === "h264_nvenc" && !!this.meta?.caps?.cuda;
-    $$(".cuda-only").forEach((e) => { e.hidden = codec !== "h264_nvenc"; });
+    const gpuFilters = isNv(codec) && !!this.meta?.caps?.cuda;
+    $$(".cuda-only").forEach((e) => { e.hidden = !isNv(codec); });
     $$(".cpu-only").forEach((e) => { e.hidden = gpuFilters; });
     // DeckLink progressive standard -> nothing to deinterlace
     const progressive = inType === "decklink" && this.dlInterlaced() === false;
@@ -606,7 +627,7 @@ const EncoderHelper = {
     });
     this.dlProgressive = progressive;
     // deint output rate only means something when a (visible) deinterlacer is chosen
-    const cudaDeint = codec === "h264_nvenc" && $("#f-cuda-deint").value;
+    const cudaDeint = isNv(codec) && $("#f-cuda-deint").value;
     const cpuDeint = !gpuFilters && $("#f-deint").value;
     $("#f-deint-rate").disabled = !(cudaDeint || cpuDeint);
     this.hint();

@@ -21,7 +21,8 @@ DeckLink ─ ffmpeg ─▶ mediamtx (sdiN_va12, sdiN_a34 …) ─ ffmpeg ─▶ 
   - 입력: DeckLink (장치/포맷/채널수), mediamtx path (여러 path 의 오디오를 합쳐서 사용 가능), testsrc (lavfi), custom
   - 오디오: 스테레오 출력마다 L, R 채널을 임의의 입력/채널에서 선택, loudnorm (I / LRA / TP)
   - NVDEC (GPU 디코딩) — mediamtx / custom 입력. 프레임을 GPU 메모리에 두고 CUDA 필터 → NVENC 로 바로 전달 (CPU 필터/libx264 사용시 자동 hwdownload)
-  - 비디오: h264_nvenc / libx264 / stream copy / none, CPU 또는 CUDA deinterlace(bwdif/yadif/estdif)·scale, GOP, B-frame
+  - 비디오: h264_nvenc / hevc_nvenc / libx264 / stream copy / none, CPU 또는 CUDA deinterlace(bwdif/yadif/estdif)·scale, GOP, B-frame
+  - hevc_nvenc: profile main / main10 (main10 은 p010 10-bit 로 변환). Pascal (P2200 등) 은 HEVC B-frame 미지원 → helper 가 0 으로 고정
   - 출력: mediamtx (N audio stream — 스테레오 쌍마다 별도 path), mediamtx path, 외부 URL 여러개 (tee), null
   - mediamtx 출력의 RTSP 전송방식 UDP / TCP 인코더별 선택 (기본값 config.json `mediamtx.rtsp_transport`)
   - 출력 프리셋: 멀티캐스트 (MPEG-TS) — 기본 RTP (`-f rtp_mpegts rtp://…`), UDP (`-f mpegts udp://…?pkt_size=1316`) 선택,
