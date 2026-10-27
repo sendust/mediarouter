@@ -1,8 +1,11 @@
 """Helper-dialog backends: DeckLink enumeration, lavfi sources, probing, capabilities."""
 import json
 import logging
+import os
 import re
+import shutil
 import subprocess
+import tempfile
 import threading
 
 from .cli_builder import LAVFI_VIDEO_SOURCES
@@ -176,3 +179,46 @@ def capabilities(ffmpeg):
             log.warning("capabilities: GPU features missing (nvenc=%s nvdec=%s cuda=%s) — helper falls back to "
                         "libx264 / CPU filters", nvenc, nvdec, cuda)
         return _caps
+
+
+# ------------------------------------------------------------ file output folders
+def browse_dirs(path):
+    """Sub-directories of `path` for the helper's folder picker (directories only, no files)."""
+    p = os.path.abspath(os.path.expanduser(path or "~"))
+    while not os.path.isdir(p) and p != os.path.dirname(p):
+        p = os.path.dirname(p)  # deleted / mistyped folder -> nearest existing parent
+    dirs, error = [], ""
+    try:
+        with os.scandir(p) as it:
+            for e in it:
+                try:
+                    if e.is_dir() and not e.name.startswith("."):
+                        dirs.append(e.name)
+                except OSError:
+                    pass
+    except OSError as e:
+        error = e.strerror or str(e)
+    parent = os.path.dirname(p)
+    return {"path": p, "parent": parent if parent != p else None, "dirs": sorted(dirs, key=str.lower),
+            "writable": os.access(p, os.W_OK | os.X_OK), "error": error}
+
+
+def check_dir_writable(path):
+    """Really create (and remove) a file in `path`: os.access alone misses read-only mounts / ACLs."""
+    p = os.path.abspath(os.path.expanduser(path or ""))
+    if not path or not os.path.isdir(p):
+        ok, reason = False, "폴더가 없습니다"
+    else:
+        try:
+            fd, tmp = tempfile.mkstemp(prefix=".mediarouter-write-test-", dir=p)
+            os.close(fd)
+            os.unlink(tmp)
+            ok, reason = True, ""
+        except OSError as e:
+            ok, reason = False, e.strerror or str(e)
+    free = shutil.disk_usage(p).free if ok else None
+    if ok:
+        log.info("file output folder %s: writable (free %.1f GB)", p, free / 2 ** 30)
+    else:
+        log.warning("file output folder %s: NOT writable — %s", p, reason)
+    return {"path": p, "ok": ok, "error": reason, "free_bytes": free}

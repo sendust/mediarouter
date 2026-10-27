@@ -40,6 +40,10 @@ DEFAULTS = {
         "tail_lines": 300,
         "restart_on_patterns": [],
     },
+    "recording": {
+        "segment_sec": 3600,   # file output: one file per segment (seconds)
+        "default_dir": "",     # folder browser start (empty = backend user's home)
+    },
     "logging": {
         "dir": "logs",
         "level": "INFO",

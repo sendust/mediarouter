@@ -60,7 +60,8 @@ app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 def _app_ctx():
     m = store.section("mediamtx")
     return {"rtsp_url": m["rtsp_url"], "rtsp_transport": m.get("rtsp_transport", "udp"),
-            "udp_buffer_size": m.get("udp_buffer_size", 4194304)}
+            "udp_buffer_size": m.get("udp_buffer_size", 4194304),
+            "segment_sec": store.section("recording").get("segment_sec", 3600)}
 
 
 def _enc_or_404(enc_id):
@@ -215,6 +216,7 @@ def helper_meta():
         "lavfi_sources": helpers.lavfi_sources(store.section("ffmpeg")["path"]) or LAVFI_VIDEO_SOURCES,
         "caps": helpers.capabilities(store.section("ffmpeg")["path"]),
         "rtsp_transport": store.section("mediamtx").get("rtsp_transport", "udp"),
+        "recording": store.section("recording"),
     }
 
 
@@ -252,6 +254,16 @@ def helper_build(spec: dict = Body(...)):
         return {"cli": build_cli(spec, _app_ctx())}
     except (ValueError, KeyError, TypeError) as e:
         raise HTTPException(400, f"cannot build command: {e}")
+
+
+@app.get("/api/helper/browse")
+def helper_browse(path: str = ""):
+    return helpers.browse_dirs(path or store.section("recording").get("default_dir") or "~")
+
+
+@app.post("/api/helper/check_dir")
+def helper_check_dir(data: dict = Body(...)):
+    return helpers.check_dir_writable(data.get("path") or "")
 
 
 @app.get("/api/helper/pair_paths")

@@ -3,6 +3,7 @@
 The result is plain text the user can still edit; the encoder only ever
 runs the stored text (the spec is kept so the helper can be reopened).
 """
+import re
 import shlex
 
 # (label, size, rate, interlaced) -- interlaced sources are generated at field
@@ -39,6 +40,16 @@ LAVFI_VIDEO_SOURCES = [
 ]
 # sources that don't accept size= / rate= in the usual way
 _NO_SIZE = {"colorchart"}
+
+FILE_EXTS = {"mp4": "mp4", "ts": "mpegts"}  # file output extension -> segment_format
+
+
+def safe_filename(name, fallback="record"):
+    """Filename-safe base name: letters/digits of any script, '.', '-', '_' (no '/', '%', spaces...)."""
+    s = re.sub(r"[^\w.-]+", "_", name or "")
+    s = re.sub(r"\.{2,}", ".", re.sub(r"_{2,}", "_", s)).strip("._-")[:100]
+    return s or fallback
+
 
 # GPU encoders: same preset / tune / rc options, CUDA filter path
 NVENC_CODECS = ("h264_nvenc", "hevc_nvenc")
@@ -356,6 +367,20 @@ class Builder:
             args += ["-f", fmt]
         return args + [url]
 
+    def _file_args(self, o):
+        """Segmented recording: <dir>/<base>_YYYY-mm-dd-HH-MM-SS.<ext>, a new file every segment_sec."""
+        ext = o.get("ext") if o.get("ext") in FILE_EXTS else "ts"
+        folder = (o.get("dir") or "").rstrip("/") or "."
+        base = safe_filename(o.get("base") or self.spec.get("title"))
+        seg = int(self.app.get("segment_sec") or 3600)
+        args = shlex.split(self.spec.get("custom", {}).get("output", "") or "")
+        if ext == "mp4" and (self.spec.get("video") or {}).get("codec") == "hevc_nvenc":
+            args += ["-tag:v", "hvc1"]  # QuickTime / Apple players want hvc1, ffmpeg's default is hev1
+        args += ["-f", "segment", "-segment_time", seg, "-segment_format", FILE_EXTS[ext], "-reset_timestamps", "1"]
+        if ext == "mp4":
+            args += ["-segment_format_options", "movflags=+faststart"]
+        return args + ["-strftime", "1", f"{folder}/{base}_%Y-%m-%d-%H-%M-%S.{ext}"]
+
     def build(self):
         custom_global = shlex.split(self.spec.get("custom", {}).get("global", "") or "")
         head = ["ffmpeg"] + custom_global
@@ -391,36 +416,40 @@ class Builder:
                 maps += ["-map", vmap] + vargs
             if amap:
                 maps += ["-map", amap] + aargs
-            targets = []
-            for o in self.spec.get("outputs") or []:
-                if o.get("type") == "mediamtx" and o.get("path"):
-                    targets.append((self._rtsp_url(o["path"]), "rtsp"))
-                elif o.get("type") == "null":
-                    targets.append(("-", "null"))
-                elif o.get("url"):
-                    targets.append((o["url"], o.get("format") if o.get("format") not in (None, "", "auto") else None))
-            if not targets:
-                targets = [("-", "null")]
-            if len(targets) == 1:
-                url, fmt = targets[0]
-                outs.append(maps + self._out_args(url, fmt))
+            files = [o for o in self.spec.get("outputs") or [] if o.get("type") == "file"]
+            if sink.get("type") == "file" and files:
+                outs.append(maps + self._file_args(files[0]))
             else:
-                # one encode, several destinations; a failing destination doesn't kill the others
-                slaves = []
-                for url, fmt in targets:
-                    fmt = fmt or _fmt_for_url(url)
-                    opts = ["onfail=ignore"]
-                    if fmt:
-                        opts.insert(0, f"f={fmt}")
-                    if fmt == "rtsp":
-                        transport = self._out_transport()
-                        opts.append(f"rtsp_transport={transport}")
-                        if self._udp_buf(transport):
-                            opts.append(f"buffer_size={int(self.app['udp_buffer_size'])}")
-                    slaves.append(f"[{':'.join(opts)}]{url}")
-                custom_out = shlex.split(self.spec.get("custom", {}).get("output", "") or "")
-                outs.append(maps + ["-flags:v", "+global_header", "-flags:a", "+global_header"]
-                            + custom_out + ["-f", "tee", "|".join(slaves)])
+                targets = []
+                for o in self.spec.get("outputs") or []:
+                    if o.get("type") == "mediamtx" and o.get("path"):
+                        targets.append((self._rtsp_url(o["path"]), "rtsp"))
+                    elif o.get("type") == "null":
+                        targets.append(("-", "null"))
+                    elif o.get("url"):
+                        targets.append((o["url"], o.get("format") if o.get("format") not in (None, "", "auto") else None))
+                if not targets:
+                    targets = [("-", "null")]
+                if len(targets) == 1:
+                    url, fmt = targets[0]
+                    outs.append(maps + self._out_args(url, fmt))
+                else:
+                    # one encode, several destinations; a failing destination doesn't kill the others
+                    slaves = []
+                    for url, fmt in targets:
+                        fmt = fmt or _fmt_for_url(url)
+                        opts = ["onfail=ignore"]
+                        if fmt:
+                            opts.insert(0, f"f={fmt}")
+                        if fmt == "rtsp":
+                            transport = self._out_transport()
+                            opts.append(f"rtsp_transport={transport}")
+                            if self._udp_buf(transport):
+                                opts.append(f"buffer_size={int(self.app['udp_buffer_size'])}")
+                        slaves.append(f"[{':'.join(opts)}]{url}")
+                    custom_out = shlex.split(self.spec.get("custom", {}).get("output", "") or "")
+                    outs.append(maps + ["-flags:v", "+global_header", "-flags:a", "+global_header"]
+                                + custom_out + ["-f", "tee", "|".join(slaves)])
 
         self._resolve_refs()
         lines = [head] + self.groups

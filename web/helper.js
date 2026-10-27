@@ -3,6 +3,9 @@
 
 const NV_PRESETS = ["p1", "p2", "p3", "p4", "p5", "p6", "p7"];
 const NV_TUNES = ["", "hq", "ll", "ull", "lossless"];
+/* filename-safe base name, same rule as the backend (cli_builder.safe_filename) */
+const safeName = (s, fallback = "record") =>
+  (s || "").replace(/[^\p{L}\p{M}\p{N}_.-]+/gu, "_").replace(/_{2,}/g, "_").replace(/\.{2,}/g, ".").replace(/^[._-]+|[._-]+$/g, "").slice(0, 100) || fallback;
 const isNv = (codec) => codec === "h264_nvenc" || codec === "hevc_nvenc";
 const PROFILES = { h264: ["", "high", "main", "baseline"], hevc_nvenc: ["", "main", "main10"] };
 const X264_PRESETS = ["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"];
@@ -58,6 +61,32 @@ const EncoderHelper = {
       if ($("#a-codec").value === "opus") $("#a-codec").value = "aac";  // most MPEG-TS receivers don't decode Opus
       this.refresh();
     });
+    // file output: folder picker, write test, base filename follows the title until edited
+    $("#of-browse").addEventListener("click", () => this.browse($("#of-dir").value));
+    $("#of-up").addEventListener("click", () => { if (this.browseParent) this.browse(this.browseParent); });
+    $("#of-list").addEventListener("click", (e) => {
+      const a = e.target.closest("a[data-path]");
+      if (a) { e.preventDefault(); this.browse(a.dataset.path); }
+    });
+    $("#of-pick").addEventListener("click", () => {
+      $("#of-dir").value = this.browseCur;
+      $("#of-picker").hidden = true;
+      this.checkDir();
+      this.refresh();
+    });
+    $("#of-cancel").addEventListener("click", () => { $("#of-picker").hidden = true; });
+    $("#of-dir").addEventListener("change", () => this.checkDir());
+    $("#of-base").addEventListener("input", () => { this.baseEdited = !!$("#of-base").value; });
+    $("#of-base").addEventListener("change", () => {
+      const b = $("#of-base");
+      if (b.value) b.value = safeName(b.value, "");
+      this.refresh();
+    });
+    $("#e-title").addEventListener("input", () => {
+      if (this.baseEdited) return;
+      $("#of-base").value = safeName($("#e-title").value, "");
+      if (radio("out_type") === "file") this.refresh();
+    });
     $("#helper-ok").addEventListener("click", () => this.submit());
     $("#e-cli-lock").addEventListener("change", (e) => { if (!e.target.checked) this.build(); });
     $("#helper-form").addEventListener("input", (e) => {
@@ -100,6 +129,12 @@ const EncoderHelper = {
     $("#ou-list").innerHTML = "";
     $("#e-cli-lock").checked = false;
 
+    // file output fields: reset (setSpec fills them only when the encoder records to file)
+    $("#of-ext").value = "ts";
+    $("#of-dir").value = this.meta.recording?.default_dir || "";
+    $("#of-base").value = "";
+    $("#of-picker").hidden = true;
+    this.dirOk = null;
     if (cfg && cfg.helper) {
       this.setSpec(cfg.helper);
     } else {
@@ -110,6 +145,9 @@ const EncoderHelper = {
     }
     $("#e-title").value = cfg ? cfg.title : "";
     $("#e-comment").value = cfg ? cfg.comment : "";
+    const base = $("#of-base").value;
+    this.baseEdited = !!base && base !== safeName($("#e-title").value, "");
+    this.checkDir();
     $("#e-autostart").checked = cfg ? !!cfg.autostart : false;
     $("#e-autorestart").checked = cfg ? !!cfg.auto_restart : true;
     if (cfg) {
@@ -395,6 +433,52 @@ const EncoderHelper = {
     return out;
   },
 
+  /* ---- file output */
+  async browse(path) {
+    try {
+      const d = await api("GET", `/api/helper/browse?path=${encodeURIComponent(path || "")}`);
+      this.browseCur = d.path;
+      this.browseParent = d.parent;
+      $("#of-picker").hidden = false;
+      $("#of-cur").innerHTML = `${esc(d.path)} <span class="${d.writable ? "ok" : "bad"}">${d.writable ? "" : "(쓰기 불가)"}</span>`;
+      $("#of-up").disabled = !d.parent;
+      const join = (n) => (d.path.endsWith("/") ? d.path : d.path + "/") + n;
+      $("#of-list").innerHTML = d.error ? `<span class="muted">${esc(d.error)}</span>`
+        : d.dirs.length ? d.dirs.map((n) => `<a href="#" data-path="${esc(join(n))}">📁 ${esc(n)}</a>`).join("")
+        : '<span class="muted">(하위 폴더 없음)</span>';
+    } catch (e) { toast(e.message, true); }
+  },
+
+  async checkDir() {
+    const el = $("#of-dir-state"), dir = $("#of-dir").value.trim();
+    if (!dir) { el.textContent = ""; el.className = "small"; this.dirOk = null; return; }
+    try {
+      const d = await api("POST", "/api/helper/check_dir", { path: dir });
+      if ($("#of-dir").value.trim() !== dir) return;  // changed meanwhile
+      this.dirOk = d.ok;
+      el.className = `small ${d.ok ? "ok" : "bad"}`;
+      el.textContent = d.ok ? `✓ 쓰기 가능 · 여유 ${fmt.bytes(d.free_bytes)}` : `✗ 쓰기 불가 — ${d.error}`;
+    } catch (e) { el.className = "small bad"; el.textContent = e.message; }
+    if (radio("out_type") === "file") this.refresh();
+  },
+
+  /* base filename: typed value, else the encoder title, else the input name */
+  fileBase(spec) {
+    return safeName($("#of-base").value || $("#e-title").value || this.autoTitle(spec).split(" → ")[0]);
+  },
+
+  filePreview() {
+    const seg = Number(this.meta?.recording?.segment_sec) || 3600;
+    const ext = $("#of-ext").value;
+    const d = new Date(), p2 = (n) => String(n).padStart(2, "0");
+    const ts = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}-${p2(d.getHours())}-${p2(d.getMinutes())}-${p2(d.getSeconds())}`;
+    const dir = ($("#of-dir").value.trim() || "<저장 폴더>").replace(/\/+$/, "");
+    const segTxt = seg % 3600 === 0 ? `${seg / 3600}시간` : seg % 60 === 0 ? `${seg / 60}분` : `${seg}초`;
+    $("#of-preview").innerHTML = `${esc(dir)}/${esc(this.fileBase(this.getSpec()))}_${ts}.${ext}<br>` +
+      `<span class="muted">segment ${segTxt} (${seg}s, config recording.segment_sec) 마다 새 파일 · 파일명 시각 = 파일 시작 시각` +
+      (ext === "mp4" ? " · mp4 는 +faststart 적용 (segment 종료시 moov 를 앞으로 이동). 비정상 종료시 기록중이던 mp4 는 재생 불가 — 안정성은 ts 가 유리" : "") + "</span>";
+  },
+
   /* index (in mxPaths order) of the first path that carries a video track */
   mxVideoInput() {
     const i = this.mxPaths().findIndex((p) => {
@@ -491,6 +575,7 @@ const EncoderHelper = {
       ? this.mcastOutput(r)
       : { type: "url", url: $(".ou-url", r).value, format: $(".ou-fmt", r).value }).filter((o) => o && o.url);
     if (outType === "null") spec.outputs = [{ type: "null" }];
+    if (outType === "file") spec.outputs = [{ type: "file", ext: $("#of-ext").value, dir: $("#of-dir").value.trim(), base: this.fileBase(spec) }];
     return spec;
   },
 
@@ -535,6 +620,11 @@ const EncoderHelper = {
       if (o.type === "url" && ["mcast", "udp_mcast"].includes(o.preset)) this.addMcast(o.mc);
       else if (o.type === "url") this.addUrl(o.url, o.format || "auto");
       if (o.type === "mediamtx") $("#om-path").value = o.path;
+      if (o.type === "file") {
+        $("#of-ext").value = o.ext === "mp4" ? "mp4" : "ts";
+        $("#of-dir").value = o.dir || "";
+        $("#of-base").value = o.base || "";
+      }
     });
     if (!$("#ou-list").children.length) this.addUrl();
 
@@ -641,6 +731,12 @@ const EncoderHelper = {
       if ($$("#ou-list .url-row.mc").length && $("#a-codec").value === "opus") notes.push("MPEG-TS 수신기(IRD, VLC 외 다수)는 Opus 를 지원하지 않는 경우가 많습니다 — AAC 권장.");
       notes.push(...this.mcastProblems());
     }
+    if (outType === "file") {
+      this.filePreview();
+      $("#of-base").placeholder = this.fileBase(this.getSpec());
+      if (!$("#of-dir").value.trim()) notes.push("저장 폴더를 선택하세요.");
+      else if (this.dirOk === false) notes.push("저장 폴더에 쓸 수 없습니다 — 인코더가 시작되지 않습니다.");
+    }
     if (pairs) notes.push("각 스테레오 쌍이 개별 mediamtx path 로 전송됩니다 (L/R 선택 불필요).");
     const toMtx = outType.startsWith("mediamtx");
     if (toMtx && ["aac", "mp3"].includes($("#a-codec").value)) notes.push("WebRTC 모니터(브라우저)는 AAC/MP3 를 재생하지 못합니다 — 모니터할 path 는 opus 권장.");
@@ -677,6 +773,7 @@ const EncoderHelper = {
       helper: spec,
     };
     if (!body.cli.trim()) { toast("command line 이 비어있습니다", true); return; }
+    if (radio("out_type") === "file" && !locked && !$("#of-dir").value.trim()) { toast("저장 폴더를 선택하세요", true); return; }
     try {
       if (this.editing) {
         await api("PATCH", `/api/encoders/${this.editing.id}`, body);
@@ -694,7 +791,8 @@ const EncoderHelper = {
   autoTitle(spec) {
     const i = spec.input;
     const src = i.type === "decklink" ? i.decklink.device : i.type === "mediamtx" ? (i.mediamtx.paths[0] || "mediamtx") : i.type === "testsrc" ? i.testsrc.source : "custom";
-    const dst = spec.sink.type === "mediamtx_pairs" ? `${spec.sink.base}_*` : spec.sink.type === "mediamtx" ? spec.outputs[0]?.path : spec.sink.type === "url" ? (spec.outputs[0]?.url || "").split("/")[2] || "url" : "null";
+    const dst = spec.sink.type === "mediamtx_pairs" ? `${spec.sink.base}_*` : spec.sink.type === "mediamtx" ? spec.outputs[0]?.path : spec.sink.type === "url" ? (spec.outputs[0]?.url || "").split("/")[2] || "url"
+      : spec.sink.type === "file" ? `${spec.outputs[0]?.ext || "file"} 녹화` : "null";
     return `${src} → ${dst}`;
   },
 };

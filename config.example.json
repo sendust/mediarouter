@@ -39,6 +39,10 @@
     "tail_lines": 300,
     "restart_on_patterns": []
   },
+  "recording": {
+    "segment_sec": 3600,
+    "default_dir": ""
+  },
   "logging": {
     "dir": "logs",
     "level": "INFO",

@@ -25,6 +25,8 @@ from .logger import get_logger
 log = get_logger("encoder")
 
 ENV_MARK = "MEDIAROUTER_ENCODER_ID"
+# SIGINT grace for mp4 +faststart recordings (the moov move rewrites the whole last segment)
+MP4_FINALIZE_SEC = 60.0
 
 # options injected after the ffmpeg binary unless the user already has them
 INJECT = [
@@ -342,6 +344,9 @@ class Encoder:
         if proc.poll() is not None:
             return proc.wait()
         timeout = float(self.app_cfg("encoder_watchdog")["stop_timeout_sec"])
+        if "faststart" in (self.cfg.get("cli") or ""):
+            # mp4 +faststart rewrites the whole file on close: give the last segment time to finish
+            timeout = max(timeout, MP4_FINALIZE_SEC)
         for sig, wait in ((signal.SIGINT, timeout), (signal.SIGTERM, 2.0), (signal.SIGKILL, 5.0)):
             try:
                 os.killpg(proc.pid, sig)

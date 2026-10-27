@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MEDIAROUTER by sendust</title>
-<link rel="stylesheet" href="/static/style.css?v=37">
+<link rel="stylesheet" href="/static/style.css?v=39">
 </head>
 <body>
 <header class="topbar">
@@ -210,6 +210,7 @@
           <label><input type="radio" name="out_type" value="mediamtx_pairs" checked> mediamtx (N audio stream)</label>
           <label><input type="radio" name="out_type" value="mediamtx"> mediamtx path</label>
           <label><input type="radio" name="out_type" value="url"> 외부 URL</label>
+          <label><input type="radio" name="out_type" value="file"> 파일 (녹화)</label>
           <label><input type="radio" name="out_type" value="null"> null (test)</label>
         </div>
         <div class="row" id="out-transport-row">
@@ -231,6 +232,26 @@
             <button type="button" class="btn ghost sm" id="ou-add-mc" title="프리셋: MPEG-TS 멀티캐스트 — 기본 RTP (rtp_mpegts), UDP 선택 가능, Pro-MPEG FEC">+ 멀티캐스트 (MPEG-TS)</button>
           </div>
           <div class="muted small">2개 이상이면 tee muxer (onfail=ignore) 로 한번 인코딩해 여러곳에 전송</div>
+        </div>
+        <div class="out-pane" data-pane="file">
+          <div class="row">
+            <label>확장자 <select id="of-ext"><option value="ts">ts</option><option value="mp4">mp4</option></select></label>
+            <label>base filename <input id="of-base" class="sm" spellcheck="false"></label>
+          </div>
+          <div class="row of-dir-row">
+            <label class="of-dir-l">저장 폴더 <input id="of-dir" spellcheck="false" placeholder="/path/to/folder"></label>
+            <button type="button" class="btn ghost sm" id="of-browse">찾아보기…</button>
+          </div>
+          <div id="of-dir-state" class="small"></div>
+          <div id="of-picker" class="of-picker" hidden>
+            <div class="of-cur"><button type="button" class="btn ghost sm" id="of-up" title="상위 폴더">↑</button> <span id="of-cur"></span></div>
+            <div id="of-list" class="of-list"></div>
+            <div class="of-btns">
+              <button type="button" class="btn primary sm" id="of-pick">이 폴더 선택</button>
+              <button type="button" class="btn ghost sm" id="of-cancel">닫기</button>
+            </div>
+          </div>
+          <div class="muted small" id="of-preview"></div>
         </div>
       </fieldset>
 
@@ -346,9 +367,9 @@
   </form>
 </dialog>
 
-<script src="/static/reader.js?v=37"></script>
-<script src="/static/meter.js?v=37"></script>
-<script src="/static/app.js?v=37"></script>
-<script src="/static/helper.js?v=37"></script>
+<script src="/static/reader.js?v=39"></script>
+<script src="/static/meter.js?v=39"></script>
+<script src="/static/app.js?v=39"></script>
+<script src="/static/helper.js?v=39"></script>
 </body>
 </html>

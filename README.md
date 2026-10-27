@@ -23,7 +23,11 @@ DeckLink ─ ffmpeg ─▶ mediamtx (sdiN_va12, sdiN_a34 …) ─ ffmpeg ─▶ 
   - NVDEC (GPU 디코딩) — mediamtx / custom 입력. 프레임을 GPU 메모리에 두고 CUDA 필터 → NVENC 로 바로 전달 (CPU 필터/libx264 사용시 자동 hwdownload)
   - 비디오: h264_nvenc / hevc_nvenc / libx264 / stream copy / none, CPU 또는 CUDA deinterlace(bwdif/yadif/estdif)·scale, GOP, B-frame
   - hevc_nvenc: profile main / main10 (main10 은 p010 10-bit 로 변환). Pascal (P2200 등) 은 HEVC B-frame 미지원 → helper 가 0 으로 고정
-  - 출력: mediamtx (N audio stream — 스테레오 쌍마다 별도 path), mediamtx path, 외부 URL 여러개 (tee), null
+  - 출력: mediamtx (N audio stream — 스테레오 쌍마다 별도 path), mediamtx path, 외부 URL 여러개 (tee), 파일 (녹화), null
+  - 파일 출력 (녹화): ts / mp4, segment 단위 분할 (`recording.segment_sec`, 기본 3600초), mp4 는 `+faststart`.
+    파일명 `<저장 폴더>/<base filename>_YYYY-MM-DD-HH-MM-SS.<ext>` (segment 시작 시각). 저장 폴더는 서버 파일시스템을 탐색해
+    선택하며 선택시 쓰기 가능 여부를 실제 파일 생성으로 확인하고 로그에 남깁니다. base filename 기본값은 인코더 타이틀
+    (파일명 안전 문자로 변환: 문자·숫자·`.` `-` `_` 외에는 `_`)
   - mediamtx 출력의 RTSP 전송방식 UDP / TCP 인코더별 선택 (기본값 config.json `mediamtx.rtsp_transport`)
   - 출력 프리셋: 멀티캐스트 (MPEG-TS) — 기본 RTP (`-f rtp_mpegts rtp://…`), UDP (`-f mpegts udp://…?pkt_size=1316`) 선택,
     group / port / TTL / 송출 NIC(localaddr), RTP 는 Pro-MPEG FEC (`fec=prompeg=l=L:d=D`, L·D 4–20, L×D ≤ 100,
@@ -84,7 +88,7 @@ Environment=PYTHONUNBUFFERED=1
 # Anything still alive after TimeoutStopSec is SIGKILLed by systemd.
 KillMode=mixed
 KillSignal=SIGTERM
-TimeoutStopSec=30
+TimeoutStopSec=90
 
 Restart=on-failure
 RestartSec=3
@@ -113,7 +117,8 @@ journalctl -u mediarouter -f              # 콘솔 출력 (logs/backend.log 에�
 
 - `User`, `Group`, 경로는 설치 위치에 맞게 수정하세요. 이 사용자는 DeckLink(`/dev/blackmagic/*`), NVIDIA 장치에 접근 가능해야 합니다.
 - `KillMode=mixed` — systemd 가 ffmpeg 를 직접 죽이지 않고 백엔드가 인코더를 순서대로 정지하게 합니다.
-  `TimeoutStopSec` 는 `encoder_watchdog.stop_timeout_sec` × 2 보다 넉넉하게 두세요.
+  `TimeoutStopSec` 는 `encoder_watchdog.stop_timeout_sec` × 2 보다 넉넉하게 두세요. mp4 파일 출력 인코더가 있으면
+  마지막 segment 마무리(최대 60초)를 위해 90초 이상이 필요합니다.
 - mediamtx 가 systemd 서비스가 아니면 `After=` 의 `mediamtx.service` 는 지워도 됩니다 (없어도 오류는 아님).
 - 서비스 등록 전에 `nohup ./run.sh` 등으로 띄운 백엔드가 있으면 먼저 종료하세요 (포트 충돌).
 - 서비스 재시작/서버 재부팅 후에도 계속 송출해야 하는 인코더는 카드에서 "백엔드 시작시 자동실행" 을 켜두세요.
@@ -161,6 +166,8 @@ journalctl -u mediarouter -f              # 콘솔 출력 (logs/backend.log 에�
 - `ffreport_watchdog` — `dir`, `loglevel`, `max_size_mb`, `backup_count`, `check_interval_sec`, `tail_lines`,
   `restart_on_patterns` (정규식 목록; fflog 에 매칭되면 재시작. 예: `"Connection refused"`).
   fflog 크기는 rotate 만 하고 재시작 사유가 되지 않습니다.
+- `recording` — `segment_sec` (파일 출력 segment 길이, 기본 3600), `default_dir` (폴더 탐색 시작 위치, 비우면 백엔드 사용자 home).
+  segment 길이는 helper 가 CLI 를 만들 때 들어가므로, 바꾼 뒤에는 인코더를 helper 에서 다시 저장해야 적용됩니다
 - `logging` — `dir`, `level`, `max_size_mb`, `backup_count`, `ring_size`
 - `encoders[]` — `title`, `comment`, `cli` (실행되는 텍스트 그대로), `autostart`, `auto_restart`, `speed_restart`,
   `scheduled_restart {enabled, mode: daily|interval, time, interval_min}`, `helper` (helper 대화창 상태)
@@ -226,6 +233,9 @@ encoders total 3, running 3
 - DeckLink → mediamtx 는 `sdiN_va12` (video + ch1/2), `sdiN_a34`, `sdiN_a56`, `sdiN_a78` 로 나눕니다.
   WebRTC 모니터용 오디오는 opus 여야 브라우저에서 재생/미터가 동작합니다 (AAC 는 WebRTC 불가).
 - 외부 URL 이 2개 이상이면 tee muxer (`onfail=ignore`) 로 한번 인코딩해 보냅니다.
+- 파일 출력은 `-f segment -strftime 1` 입니다. segment 는 keyframe 에서 나뉘므로 길이가 GOP 만큼 어긋날 수 있습니다.
+  mp4 는 segment 를 닫을 때 moov 를 앞으로 옮기며 파일 전체를 다시 쓰므로, 정지시 SIGINT 대기를
+  `stop_timeout_sec` 대신 최소 60초로 늘립니다. 비정상 종료(전원, SIGKILL)시 기록중이던 mp4 는 재생할 수 없고 ts 는 그때까지 재생됩니다.
 - loudnorm 은 single-pass 이며 출력이 192kHz 이므로 뒤에 `aresample` 이 자동으로 붙습니다.
 - 인코더 카드의 CPU% 는 코어 기준입니다 (100% = 1 스레드 분량).
 - 모니터 카드의 path 라벨을 클릭하면 그 path 오디오를 청취합니다 (기본은 무음, 미터만 동작).

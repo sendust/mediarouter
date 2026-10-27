@@ -112,7 +112,8 @@ pre { margin: 4px 0; }
 .meter-list { display: flex; flex-direction: column; gap: 8px; }
 .mgroup { display: flex; flex-direction: column; gap: 2px; }
 .mfoot { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
-.mlabel { font-size: 11px; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; color: var(--text); min-width: 0; }
+/* grows into the free space: a box sized exactly to the text (fractional px) clips the last glyph */
+.mlabel { flex: 1 1 auto; padding-right: 2px; font-size: 11px; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; color: var(--text); min-width: 0; }
 .mlabel.listen { color: var(--accent); }
 .mlabel.off { color: var(--err); }
 .mbars { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -242,3 +243,21 @@ a.mtx-open:hover .ext { color: #7fd4ff; }
 #sys-gpus .bad { color: var(--err); font-weight: 600; }
 #sys-gpus td { min-width: 3.5em; }
 #sys-gpus td:nth-child(n+2) { white-space: nowrap; }
+/* file output (recording) */
+.of-dir-row { flex-wrap: nowrap; align-items: center; }
+.dlg label.of-dir-l { flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; white-space: nowrap; }
+#of-browse { flex: none; }
+.of-dir-l input { flex: 1 1 auto; min-width: 0; width: 100%; font-family: var(--mono); }
+#of-base { font-family: var(--mono); min-width: 14em; }
+#of-dir-state.ok { color: var(--ok); }
+#of-dir-state.bad { color: var(--err); }
+.of-picker { border: 1px solid var(--border); border-radius: 4px; padding: 6px; margin: 4px 0; display: flex; flex-direction: column; gap: 6px; }
+.of-cur { display: flex; gap: 6px; align-items: center; font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+.of-cur #of-up { flex: none; width: auto; padding: 1px 10px; }
+.of-cur .bad { color: var(--err); }
+.of-list { max-height: 220px; overflow: auto; display: flex; flex-direction: column; font-family: var(--mono); font-size: 12px; }
+.of-list a { padding: 2px 6px; border-radius: 3px; color: var(--text); text-decoration: none; cursor: pointer; }
+.of-list a:hover { background: #262c35; color: #7fd4ff; }
+.of-btns { display: flex; gap: 6px; }
+.of-btns .btn { flex: none; width: auto; }
+#of-preview { font-family: var(--mono); overflow-wrap: anywhere; }
