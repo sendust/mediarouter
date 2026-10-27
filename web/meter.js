@@ -84,7 +84,7 @@ class PathMeter {
     this.label = document.createElement("div");
     this.label.className = "mlabel off";
     this.label.textContent = path;
-    this.label.title = `${path} — 클릭하면 이 path 의 오디오를 모니터링(청취)`;
+    this.label.title = t("{0} — 클릭하면 이 path 의 오디오를 모니터링(청취)", path);
     this.label.onclick = (e) => { e.stopPropagation(); onListen(this); };
     this.bars = document.createElement("div");
     this.bars.className = "mbars";
@@ -210,7 +210,7 @@ class MonitorView {
       });
       this.readers.push(r);
     });
-    if (!paths.length) this.list.innerHTML = '<div class="muted small">path 없음</div>';
+    if (!paths.length) this.list.innerHTML = `<div class="muted small">${t("path 없음")}</div>`;
     this.statsTimer = setInterval(() => this.pollStats(), 1000);
   }
   async pollStats() {
@@ -276,3 +276,8 @@ const Meters = {
   },
 };
 requestAnimationFrame(Meters.loop);
+
+/* language switch: meter label tooltips are built once per path */
+document.addEventListener("langchange", () => {
+  document.querySelectorAll(".mlabel").forEach((l) => { l.title = t("{0} — 클릭하면 이 path 의 오디오를 모니터링(청취)", l.textContent); });
+});

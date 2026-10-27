@@ -72,7 +72,7 @@ async function copyText(text) {
   ta.select();
   const ok = document.execCommand("copy");
   ta.remove();
-  if (!ok) throw new Error("복사 실패");
+  if (!ok) throw new Error(t("복사 실패"));
 }
 async function readClipboard() {
   if (navigator.clipboard && navigator.clipboard.readText && window.isSecureContext) return navigator.clipboard.readText();
@@ -119,7 +119,7 @@ function makeSortable(container, kind) {
     ph = document.createElement("div");
     ph.className = "card-placeholder";
     ph.style.height = dragEl.offsetHeight + "px";
-    ph.innerHTML = `<span>여기에 놓기 — ${esc($(".title-in", dragEl)?.value || "")}</span>`;
+    ph.innerHTML = `<span>${t("여기에 놓기 — {0}", esc($(".title-in", dragEl)?.value || ""))}</span>`;
     // hide the card only after the browser has taken its drag image
     setTimeout(() => {
       if (!dragEl) return;
@@ -250,7 +250,7 @@ class EncoderCard {
         } else if (a === "helper") {
           EncoderHelper.open(this.cfg);
         } else if (a === "delete") {
-          if (await confirmBox(`인코더 "${this.cfg.title}" 를 삭제할까요? (실행중이면 정지됩니다)`)) {
+          if (await confirmBox(t("인코더 \"{0}\" 를 삭제할까요? (실행중이면 정지됩니다)", this.cfg.title))) {
             await api("DELETE", `/api/encoders/${this.id}`);
             this.destroy();
           }
@@ -311,11 +311,11 @@ class EncoderCard {
       for (const m of this.cfg.cli.matchAll(/(-i\s+['"]?)?rtsps?:\/\/[^\s'"|\/]+\/([^\s'"|?]+)/g)) if (!m[1]) paths.add(m[2]);  // outputs only
       const live = [...paths].filter((n) => App.pathInfo[n]?.bps_in != null);
       if (live.length) {
-        this.bitrateTip = `ffmpeg 가 이 출력(rtsp/tee)의 bitrate 를 제공하지 않아 mediamtx 수신량으로 표시: ${live.join(", ")}`;
+        this.bitrateTip = t("ffmpeg 가 이 출력(rtsp/tee)의 bitrate 를 제공하지 않아 mediamtx 수신량으로 표시: {0}", live.join(", "));
         return "≈" + fmt.bps(live.reduce((a, n) => a + App.pathInfo[n].bps_in, 0));
       }
     }
-    if (p.bitrate === "N/A") this.bitrateTip = "ffmpeg 가 이 출력 형식(rtsp/tee 등)의 bitrate 를 제공하지 않습니다";
+    if (p.bitrate === "N/A") this.bitrateTip = t("ffmpeg 가 이 출력 형식(rtsp/tee 등)의 bitrate 를 제공하지 않습니다");
     return p.bitrate ?? "-";
   }
 
@@ -329,7 +329,7 @@ class EncoderCard {
     sb.hidden = !st.slow;
     if (st.slow) {
       sb.textContent = `SLOW ${st.speed_now.toFixed(2)}x`;
-      sb.title = `최근 구간 처리속도 ${st.speed_now.toFixed(2)}x (실시간 미달) — ${fmt.dur(st.slow_for)} 째`;
+      sb.title = t("최근 구간 처리속도 {0}x (실시간 미달) — {1} 째", st.speed_now.toFixed(2), fmt.dur(st.slow_for));
     }
     const active = ["running", "starting", "restarting", "stopping"].includes(st.state);
     $('[data-a="start"]', this.el).disabled = active;
@@ -355,13 +355,13 @@ class EncoderCard {
     $(".stats", this.el).innerHTML = cells.map(([k, v]) => `<div><span>${k}</span><b title="${esc(k === "bitrate" ? this.bitrateTip || v : v)}">${esc(v)}</b></div>`).join("");
     const err = $(".err", this.el);
     let msg = ["error", "restarting"].includes(st.state) ? st.last_reason : "";
-    if (st.last_error) msg = (msg ? msg + " — " : "") + `${st.last_error}  (${fmt.dur(st.last_error_age)} 전)`;
+    if (st.last_error) msg = (msg ? msg + " — " : "") + t("{0}  ({1} 전)", st.last_error, fmt.dur(st.last_error_age));
     err.hidden = !msg;
     err.textContent = msg;
     // a stale error from a healthy, running process is shown dimmed
     err.style.opacity = st.state === "running" && st.last_error_age > 60 ? 0.5 : 1;
     this.renderCodecs(st);
-    $(".fflog-size", this.el).textContent = `${fmt.bytes(st.fflog_size)} (backup 포함 ${fmt.bytes(st.fflog_total)})`;
+    $(".fflog-size", this.el).textContent = t("{0} (backup 포함 {1})", fmt.bytes(st.fflog_size), fmt.bytes(st.fflog_total));
     $(".argv", this.el).textContent = st.argv || "(not started)";
   }
   renderCodecs(st) {
@@ -438,10 +438,10 @@ class MonitorCard {
     this.view = new MonitorView(this.el, cfg, App.whepBase());
     Meters.views.add(this.view);
     this.sig = "";
-    const t = $(".title-in", this.el);
-    t.value = cfg.title || "";
-    t.addEventListener("change", () => api("PATCH", `/api/monitors/${this.id}`, { title: t.value }).catch((e) => toast(e.message, true)));
-    t.addEventListener("keydown", (e) => { if (e.key === "Enter") t.blur(); });
+    const ti = $(".title-in", this.el);
+    ti.value = cfg.title || "";
+    ti.addEventListener("change", () => api("PATCH", `/api/monitors/${this.id}`, { title: ti.value }).catch((e) => toast(e.message, true)));
+    ti.addEventListener("keydown", (e) => { if (e.key === "Enter") ti.blur(); });
     this.infoTimer = setInterval(() => this.renderInfo(), 1000);
     const en = $('[data-f="enabled"]', this.el);
     en.checked = this.enabled();
@@ -455,7 +455,7 @@ class MonitorCard {
       if (!b) return;
       if (b.dataset.a === "reconnect") this.start();
       if (b.dataset.a === "edit") MonitorHelper.open(this.cfg);
-      if (b.dataset.a === "delete" && (await confirmBox(`모니터 "${this.cfg.title}" 를 삭제할까요?`))) {
+      if (b.dataset.a === "delete" && (await confirmBox(t("모니터 \"{0}\" 를 삭제할까요?", this.cfg.title)))) {
         await api("DELETE", `/api/monitors/${this.id}`).catch((err) => toast(err.message, true));
         this.destroy();
       }
@@ -504,8 +504,8 @@ class MonitorCard {
     const changed = JSON.stringify(cfg.paths) !== JSON.stringify(this.cfg.paths)
       || (cfg.enabled !== false) !== this.enabled();
     this.cfg = cfg;
-    const t = $(".title-in", this.el);
-    if (document.activeElement !== t) t.value = cfg.title || "";
+    const ti = $(".title-in", this.el);
+    if (document.activeElement !== ti) ti.value = cfg.title || "";
     $('[data-f="enabled"]', this.el).checked = this.enabled();
     if (changed) this.start();
   }
@@ -551,8 +551,8 @@ async function loadMonitors() {
 }
 
 function emptyHints() {
-  [["#encoders", App.encoders, "인코더가 없습니다. + Encoder 로 추가하세요."],
-   ["#monitors", App.monitors, "모니터가 없습니다. + Monitor 로 mediamtx path 를 추가하세요."]].forEach(([sel, map, text]) => {
+  [["#encoders", App.encoders, t("인코더가 없습니다. + Encoder 로 추가하세요.")],
+   ["#monitors", App.monitors, t("모니터가 없습니다. + Monitor 로 mediamtx path 를 추가하세요.")]].forEach(([sel, map, text]) => {
     const box = $(sel);
     let hint = $(".empty", box);
     if (map.size === 0 && !hint) {
@@ -579,11 +579,11 @@ function renderSystem(s) {
     ["IP", ips || "-"],
     ["CPU", esc(s.cpu_model)],
     ["Cores / Threads", `${s.cpu_cores ?? "-"} / ${s.cpu_threads ?? "-"}`],
-    ["CPU 사용률", s.cpu_percent != null ? `${s.cpu_percent.toFixed(1)}% <span class="muted">(load ${(s.load || []).map((x) => x.toFixed(2)).join(" ")})</span>` : "-"],
-    ["ffmpeg 프로세스", s.ffmpeg_count ?? "-"],
-    ["RAM 전체", fmt.bytes(s.mem_total)],
+    [t("CPU 사용률"), s.cpu_percent != null ? `${s.cpu_percent.toFixed(1)}% <span class="muted">(load ${(s.load || []).map((x) => x.toFixed(2)).join(" ")})</span>` : "-"],
+    [t("ffmpeg 프로세스"), s.ffmpeg_count ?? "-"],
+    [t("RAM 전체"), fmt.bytes(s.mem_total)],
     ["RAM free", `${fmt.bytes(s.mem_free)} <span class="muted">(available ${fmt.bytes(s.mem_available)})</span>`],
-    ["시스템 시간", esc(s.time)],
+    [t("시스템 시간"), esc(s.time)],
   ];
   $("#sys-kv").innerHTML = kv.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
   renderGpus(s.gpus || []);
@@ -630,19 +630,19 @@ function renderMtx(m) {
   st.className = `badge ${m.ok ? "on" : "off"}`;
   const box = $("#mtx-paths");
   if (!m.ok) {
-    box.innerHTML = `<div class="muted small">${esc(m.error)}<br>mediamtx.yml 의 api: true 및 config.json mediamtx.api_url 을 확인하세요.</div>`;
+    box.innerHTML = `<div class="muted small">${esc(m.error)}<br>${t("mediamtx.yml 의 api: true 및 config.json mediamtx.api_url 을 확인하세요.")}</div>`;
   } else if (!m.paths.length) {
-    box.innerHTML = '<div class="muted small">활성화된 path 가 없습니다.</div>';
+    box.innerHTML = `<div class="muted small">${t("활성화된 path 가 없습니다.")}</div>`;
   } else {
     box.innerHTML = m.paths.map((p) => {
       const tracks = p.tracks.map((t) => t.codec + (t.width ? ` ${t.width}x${t.height}` : "") + (t.channels ? ` ${t.channels}ch` : "")).join(", ");
       const readers = p.readers.length
         ? p.readers.map((r) => `<div class="r">↳ ${esc(r.type)} ${esc(r.remote)} ${esc(r.transport || "")}</div>`).join("")
-        : '<div class="r">↳ reader 없음</div>';
+        : `<div class="r">${t("↳ reader 없음")}</div>`;
       const href = `${App.whepBase()}/${encodeURIComponent(p.name)}/`;
-      return `<div class="mtx-path"><a class="n mtx-open" href="${esc(href)}" target="_blank" rel="noopener" data-path="${esc(p.name)}" title="WebRTC 로 새 창에서 보기 (mediamtx player)">${esc(p.name)} <span class="ext">↗</span></a> <span class="badge ${p.ready ? "on" : "off"}">${p.ready ? "ready" : "not ready"}</span>` +
+      return `<div class="mtx-path"><a class="n mtx-open" href="${esc(href)}" target="_blank" rel="noopener" data-path="${esc(p.name)}" title="${t("WebRTC 로 새 창에서 보기 (mediamtx player)")}">${esc(p.name)} <span class="ext">↗</span></a> <span class="badge ${p.ready ? "on" : "off"}">${p.ready ? "ready" : "not ready"}</span>` +
         `<div class="mtx-rate"><span title="source → mediamtx">→ ${p.bps_in != null ? fmt.bps(p.bps_in) : "-"}</span>` +
-        `<span title="mediamtx → readers (합계)">← ${p.bps_out != null ? fmt.bps(p.bps_out) : "-"}</span></div>` +
+        `<span title="${t("mediamtx → readers (합계)")}">← ${p.bps_out != null ? fmt.bps(p.bps_out) : "-"}</span></div>` +
         `<div class="muted small">${esc(tracks)}</div>` +
         `<div class="small">source: ${esc(p.source_type || "-")} ${esc(p.source_remote || "")} · in ${fmt.bytes(p.bytes_in)} · out ${fmt.bytes(p.bytes_out)}</div>${readers}</div>`;
     }).join("");
@@ -692,7 +692,7 @@ function confirmBox(text) {
     const d = document.createElement("dialog");
     d.className = "dlg";
     d.innerHTML = `<form method="dialog" class="dlg-inner"><div>${esc(text)}</div><div class="dlg-foot">` +
-      `<button value="no" class="btn ghost">취소</button><button value="yes" class="btn primary">확인</button></div></form>`;
+      `<button value="no" class="btn ghost">${t("취소")}</button><button value="yes" class="btn primary">${t("확인")}</button></div></form>`;
     document.body.append(d);
     d.addEventListener("close", () => { resolve(d.returnValue === "yes"); d.remove(); });
     d.showModal();

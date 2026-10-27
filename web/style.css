@@ -261,3 +261,6 @@ a.mtx-open:hover .ext { color: #7fd4ff; }
 .of-btns { display: flex; gap: 6px; }
 .of-btns .btn { flex: none; width: auto; }
 #of-preview { font-family: var(--mono); overflow-wrap: anywhere; }
+.lang-btn { padding: 1px 6px; gap: 0; font-size: 11px; }
+.lang-btn span { padding: 0 4px; color: var(--muted); }
+.lang-btn span.on { color: var(--text); font-weight: 700; }

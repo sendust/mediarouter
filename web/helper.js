@@ -102,8 +102,8 @@ const EncoderHelper = {
   async open(cfg) {
     await this.init();
     this.editing = cfg;
-    $("#helper-title").textContent = cfg ? `Encoder 편집 — ${cfg.title}` : "Encoder 추가";
-    $("#helper-ok").textContent = cfg ? "저장" : "추가";
+    $("#helper-title").textContent = cfg ? t("Encoder 편집 — {0}", cfg.title) : t("Encoder 추가");
+    $("#helper-ok").textContent = cfg ? t("저장") : t("추가");
     const dlg = $("#dlg-encoder");
     dlg.showModal();
     if (!this.meta) {
@@ -115,15 +115,15 @@ const EncoderHelper = {
     }
     const c = this.meta.caps || {};
     const warn = [];
-    if (!c.nvenc) warn.push(`NVENC 사용 불가 (${c.nvenc_error || "probe failed"})`);
-    if (c.nvenc && c.hevc_nvenc === false) warn.push(`HEVC NVENC 사용 불가 (${c.hevc_nvenc_error || "probe failed"})`);
+    if (!c.nvenc) warn.push(t("NVENC 사용 불가 ({0})", c.nvenc_error || "probe failed"));
+    if (c.nvenc && c.hevc_nvenc === false) warn.push(t("HEVC NVENC 사용 불가 ({0})", c.hevc_nvenc_error || "probe failed"));
     const hevcOpt = $('#v-codec option[value="hevc_nvenc"]');
     hevcOpt.disabled = c.hevc_nvenc === false;
-    hevcOpt.textContent = c.hevc_nvenc === false ? "hevc_nvenc (사용 불가)" : "hevc_nvenc (h265)";
-    if (!c.cuda) warn.push(`CUDA filter 사용 불가 (${c.cuda_error || "probe failed"})`);
-    if (c.nvdec === false) warn.push(`NVDEC 사용 불가 (${c.nvdec_error || "probe failed"})`);
+    hevcOpt.textContent = c.hevc_nvenc === false ? t("hevc_nvenc (사용 불가)") : "hevc_nvenc (h265)";
+    if (!c.cuda) warn.push(t("CUDA filter 사용 불가 ({0})", c.cuda_error || "probe failed"));
+    if (c.nvdec === false) warn.push(t("NVDEC 사용 불가 ({0})", c.nvdec_error || "probe failed"));
     $("#caps-warn").hidden = !warn.length;
-    $("#caps-warn").textContent = warn.length ? `이 시스템에서 ${warn.join(" / ")} — libx264 / CPU filter 를 사용하세요.` : "";
+    $("#caps-warn").textContent = warn.length ? t("이 시스템에서 {0} — libx264 / CPU filter 를 사용하세요.", warn.join(" / ")) : "";
 
     await Promise.all([this.loadDevices(), this.loadPaths(), this.loadLocalIps()]);
     $("#ou-list").innerHTML = "";
@@ -168,7 +168,7 @@ const EncoderHelper = {
     const sel = $("#dl-device");
     const keep = sel.value;
     opts(sel, this.devices.map((d) => d.name), this.devices.map((d) => `${d.name}`));
-    if (!this.devices.length) sel.innerHTML = '<option value="">(DeckLink 장치 없음)</option>';
+    if (!this.devices.length) sel.innerHTML = `<option value="">${t("(DeckLink 장치 없음)")}</option>`;
     if (keep) sel.value = keep;
   },
 
@@ -184,16 +184,16 @@ const EncoderHelper = {
       opts(sel, names, labels);
       [...sel.options].forEach((o) => { o.selected = keep.includes(o.value); });
     });
-    if (!names.length) $("#mx-path").innerHTML = '<option value="">(활성 path 없음 — mediamtx API 확인)</option>';
+    if (!names.length) $("#mx-path").innerHTML = `<option value="">${t("(활성 path 없음 — mediamtx API 확인)")}</option>`;
     // an empty multi-select collapses to a thin vertical bar: show a disabled placeholder row instead
     const extra = $("#mx-extra");
     extra.disabled = !names.length;
-    if (!names.length) extra.innerHTML = '<option disabled>(활성 path 없음)</option>';
+    if (!names.length) extra.innerHTML = `<option disabled>${t("(활성 path 없음)")}</option>`;
   },
 
   async queryFormats() {
     const dev = $("#dl-device").value;
-    $("#dl-query-msg").textContent = "조회중… (사용중인 장치는 조회 불가)";
+    $("#dl-query-msg").textContent = t("조회중… (사용중인 장치는 조회 불가)");
     try {
       const d = await api("GET", `/api/helper/decklink/formats?device=${encodeURIComponent(dev)}`);
       if (d.formats.length) {
@@ -202,7 +202,7 @@ const EncoderHelper = {
         $("#dl-format").value = cur;
         $("#dl-query-msg").textContent = `${d.formats.length} formats`;
       } else {
-        $("#dl-query-msg").textContent = "조회 실패: " + (d.raw || "").split("\n").slice(-2).join(" ");
+        $("#dl-query-msg").textContent = t("조회 실패: ") + (d.raw || "").split("\n").slice(-2).join(" ");
       }
     } catch (e) { $("#dl-query-msg").textContent = e.message; }
   },
@@ -255,14 +255,14 @@ const EncoderHelper = {
       .concat(this.localIps.map((x) => `<option value="${esc(x.ip)}">${esc(x.nic)} ${esc(x.ip)}</option>`));
     if (m.localaddr && !this.localIps.some((x) => x.ip === m.localaddr)) ifOpts.push(`<option value="${esc(m.localaddr)}">${esc(m.localaddr)}</option>`);
     row.innerHTML =
-      `<select class="mc-proto" title="RTP: -f rtp_mpegts rtp://… (RTP 시퀀스로 손실 확인, Pro-MPEG FEC 가능) / UDP: -f mpegts udp://… (pkt_size 1316)">` +
+      `<select class="mc-proto" title="${t("RTP: -f rtp_mpegts rtp://… (RTP 시퀀스로 손실 확인, Pro-MPEG FEC 가능) / UDP: -f mpegts udp://… (pkt_size 1316)")}">` +
         `<option value="rtp">RTP-TS</option><option value="udp">UDP-TS</option></select>` +
       `<input class="mc-group" placeholder="239.1.1.1" value="${esc(m.group)}" title="multicast group (224.0.0.0 – 239.255.255.255)">` +
       `<span>:</span><input class="mc-port" type="number" min="1" max="65535" value="${esc(m.port)}" title="port">` +
       `<label>TTL <input class="mc-ttl" type="number" min="1" max="255" value="${esc(m.ttl)}"></label>` +
-      `<select class="mc-if" title="송출 NIC (localaddr)">${ifOpts.join("")}</select>` +
+      `<select class="mc-if" title="${t("송출 NIC (localaddr)")}">${ifOpts.join("")}</select>` +
       `<button type="button" class="btn ghost sm">✕</button>` +
-      `<label class="mc-fecw" title="Pro-MPEG CoP3 (SMPTE 2022-1) FEC. column FEC → port+2, row FEC → port+4. L×D ≤ 100, 각 4–20">` +
+      `<label class="mc-fecw" title="${t("Pro-MPEG CoP3 (SMPTE 2022-1) FEC. column FEC → port+2, row FEC → port+4. L×D ≤ 100, 각 4–20")}">` +
         `<input type="checkbox" class="mc-fec"> FEC (prompeg) L <input class="mc-l" type="number" min="4" max="20" value="${esc(m.l)}">` +
         ` D <input class="mc-d" type="number" min="4" max="20" value="${esc(m.d)}"></label>`;
     $(".mc-proto", row).value = m.proto;
@@ -297,16 +297,16 @@ const EncoderHelper = {
     const out = [];
     const rows = $$("#ou-list .url-row.mc").map((r) => this.mcastOutput(r)?.mc).filter(Boolean);
     const bad = rows.map((m) => m.group).filter((g) => !/^2(2[4-9]|3\d)\.\d+\.\d+\.\d+$/.test(g));
-    if (bad.length) out.push(`${bad.join(", ")} 은 멀티캐스트 주소(224.0.0.0 – 239.255.255.255)가 아닙니다.`);
+    if (bad.length) out.push(t("{0} 은 멀티캐스트 주소(224.0.0.0 – 239.255.255.255)가 아닙니다.", bad.join(", ")));
     rows.filter((m) => m.proto === "rtp" && m.fec).forEach((m) => {
       if (m.l < 4 || m.l > 20 || m.d < 4 || m.d > 20 || m.l * m.d > 100)
-        out.push(`FEC L=${m.l} D=${m.d}: L, D 는 4–20, L×D ≤ 100 이어야 합니다 (ffmpeg 가 출력을 열지 못함).`);
+        out.push(t("FEC L={0} D={1}: L, D 는 4–20, L×D ≤ 100 이어야 합니다 (ffmpeg 가 출력을 열지 못함).", m.l, m.d));
     });
     // RTP uses port+1 (RTCP), FEC port+2 / port+4: same group with ports closer than that collide
     const span = (m) => (m.proto === "rtp" ? (m.fec ? 5 : 2) : 1);
     rows.forEach((a, i) => rows.slice(i + 1).forEach((b) => {
       if (a.group === b.group && Math.abs(a.port - b.port) < Math.max(span(a), span(b)))
-        out.push(`${a.group}:${a.port} 와 :${b.port} 포트가 겹칩니다 (RTP 는 port+1 RTCP, FEC 는 port+2/+4 사용).`);
+        out.push(t("{0}:{1} 와 :{2} 포트가 겹칩니다 (RTP 는 port+1 RTCP, FEC 는 port+2/+4 사용).", a.group, a.port, b.port));
     }));
     return out;
   },
@@ -332,33 +332,33 @@ const EncoderHelper = {
 
   hint() {
     const codec = $("#v-codec").value;
-    const p = $("#v-preset").value, t = $("#v-tune").value;
+    const p = $("#v-preset").value, tune = $("#v-tune").value;
     let html;
     if (isNv(codec)) {
       const presets = {
-        p1: "가장 빠름 · 화질 최저", p2: "매우 빠름", p3: "빠름", p4: "중간 (기본값) · 속도/화질 균형",
-        p5: "느림 · 화질 좋음", p6: "더 느림 · 화질 더 좋음", p7: "가장 느림 · 화질 최고",
+        p1: t("가장 빠름 · 화질 최저"), p2: t("매우 빠름"), p3: t("빠름"), p4: t("중간 (기본값) · 속도/화질 균형"),
+        p5: t("느림 · 화질 좋음"), p6: t("더 느림 · 화질 더 좋음"), p7: t("가장 느림 · 화질 최고"),
       };
       const tunes = {
-        "": "지정 안함 — ffmpeg 기본값 hq 와 같음",
-        hq: "<b>high quality</b> — 화질 우선. lookahead/B-frame 사용 가능 → 지연이 생길 수 있음. 녹화·VOD·외부 송출(지연 무관)용",
-        ll: "<b>low latency</b> — 저지연. B-frame/lookahead 없이 즉시 출력, 화질은 hq 보다 약간 낮음. 라이브 전달·모니터용 권장",
-        ull: "<b>ultra low latency</b> — 지연 최소, 화질 가장 낮음. 같은 비트레이트에서 블록이 더 보일 수 있음",
-        lossless: "<b>lossless</b> — 무손실. 비트레이트 매우 큼, 스트리밍 부적합",
+        "": t("지정 안함 — ffmpeg 기본값 hq 와 같음"),
+        hq: t("<b>high quality</b> — 화질 우선. lookahead/B-frame 사용 가능 → 지연이 생길 수 있음. 녹화·VOD·외부 송출(지연 무관)용"),
+        ll: t("<b>low latency</b> — 저지연. B-frame/lookahead 없이 즉시 출력, 화질은 hq 보다 약간 낮음. 라이브 전달·모니터용 권장"),
+        ull: t("<b>ultra low latency</b> — 지연 최소, 화질 가장 낮음. 같은 비트레이트에서 블록이 더 보일 수 있음"),
+        lossless: t("<b>lossless</b> — 무손실. 비트레이트 매우 큼, 스트리밍 부적합"),
       };
-      html = `<b>preset ${esc(p)}</b>: ${presets[p] || ""}. p1→p7 로 갈수록 화질은 좋아지고 GPU 부하가 커집니다. ` +
-        `프리셋 자체는 프레임 지연을 거의 늘리지 않습니다 (P2200 1080p 기준 p4~p5 권장, 여러 채널이면 p4 이하).<br>` +
-        `<b>tune ${esc(t || "-")}</b>: ${tunes[t] || ""}<br>` +
-        `<b>zerolatency</b>: 프레임 재정렬 지연 없이 출력 (B-frame 0 과 함께 사용). 지연을 줄이려면 tune ll/ull + zerolatency + B-frame 0.`;
+      html = t("<b>preset {0}</b>: {1}. p1→p7 로 갈수록 화질은 좋아지고 GPU 부하가 커집니다. " +
+        "프리셋 자체는 프레임 지연을 거의 늘리지 않습니다 (P2200 1080p 기준 p4~p5 권장, 여러 채널이면 p4 이하).<br>", esc(p), presets[p] || "") +
+        `<b>tune ${esc(tune || "-")}</b>: ${tunes[tune] || ""}<br>` +
+        t("<b>zerolatency</b>: 프레임 재정렬 지연 없이 출력 (B-frame 0 과 함께 사용). 지연을 줄이려면 tune ll/ull + zerolatency + B-frame 0.");
       if (codec === "hevc_nvenc") {
-        html += `<br><b>HEVC</b>: 같은 화질에 H.264 보다 비트레이트를 약 30~40% 줄일 수 있음. ` +
-          `profile <b>main10</b> 은 p010 (10-bit) 으로 변환해 인코딩. ` +
-          `브라우저 WebRTC 모니터·플레이어는 HEVC 재생이 제한적이고, RTMP 는 enhanced RTMP 를 지원하는 수신측만 받을 수 있음.` +
-          (this.meta?.caps?.hevc_bframes ? "" : ` 이 GPU 는 HEVC B-frame 을 지원하지 않아 B-frames 는 0 으로 고정됩니다.`);
+        html += t("<br><b>HEVC</b>: 같은 화질에 H.264 보다 비트레이트를 약 30~40% 줄일 수 있음. " +
+          "profile <b>main10</b> 은 p010 (10-bit) 으로 변환해 인코딩. " +
+          "브라우저 WebRTC 모니터·플레이어는 HEVC 재생이 제한적이고, RTMP 는 enhanced RTMP 를 지원하는 수신측만 받을 수 있음.") +
+          (this.meta?.caps?.hevc_bframes ? "" : t(" 이 GPU 는 HEVC B-frame 을 지원하지 않아 B-frames 는 0 으로 고정됩니다."));
       }
     } else if (codec === "libx264") {
-      html = `<b>preset ${esc(p)}</b>: ultrafast→veryslow 로 갈수록 화질↑ CPU 부하↑. 라이브는 veryfast~fast 권장.<br>` +
-        `<b>tune</b>: film/animation/grain 등은 소스 특성별 화질 튜닝. <b>zerolatency</b> 는 B-frame·lookahead·sliced-thread 설정으로 지연을 최소화 (화질 약간 하락).`;
+      html = t("<b>preset {0}</b>: ultrafast→veryslow 로 갈수록 화질↑ CPU 부하↑. 라이브는 veryfast~fast 권장.<br>" +
+        "<b>tune</b>: film/animation/grain 등은 소스 특성별 화질 튜닝. <b>zerolatency</b> 는 B-frame·lookahead·sliced-thread 설정으로 지연을 최소화 (화질 약간 하락).", esc(p));
     } else {
       html = "";
     }
@@ -369,7 +369,7 @@ const EncoderHelper = {
   codecLists() {
     const codec = $("#v-codec").value;
     const nv = isNv(codec);
-    const p = $("#v-preset").value, t = $("#v-tune").value;
+    const p = $("#v-preset").value, tune = $("#v-tune").value;
     opts($("#v-preset"), nv ? NV_PRESETS : X264_PRESETS);
     opts($("#v-tune"), nv ? NV_TUNES : X264_TUNES);
     $("#v-preset").value = (nv ? NV_PRESETS : X264_PRESETS).includes(p) ? p : nv ? "p4" : "veryfast";
@@ -440,12 +440,12 @@ const EncoderHelper = {
       this.browseCur = d.path;
       this.browseParent = d.parent;
       $("#of-picker").hidden = false;
-      $("#of-cur").innerHTML = `${esc(d.path)} <span class="${d.writable ? "ok" : "bad"}">${d.writable ? "" : "(쓰기 불가)"}</span>`;
+      $("#of-cur").innerHTML = `${esc(d.path)} <span class="${d.writable ? "ok" : "bad"}">${d.writable ? "" : t("(쓰기 불가)")}</span>`;
       $("#of-up").disabled = !d.parent;
       const join = (n) => (d.path.endsWith("/") ? d.path : d.path + "/") + n;
       $("#of-list").innerHTML = d.error ? `<span class="muted">${esc(d.error)}</span>`
         : d.dirs.length ? d.dirs.map((n) => `<a href="#" data-path="${esc(join(n))}">📁 ${esc(n)}</a>`).join("")
-        : '<span class="muted">(하위 폴더 없음)</span>';
+        : `<span class="muted">${t("(하위 폴더 없음)")}</span>`;
     } catch (e) { toast(e.message, true); }
   },
 
@@ -457,7 +457,7 @@ const EncoderHelper = {
       if ($("#of-dir").value.trim() !== dir) return;  // changed meanwhile
       this.dirOk = d.ok;
       el.className = `small ${d.ok ? "ok" : "bad"}`;
-      el.textContent = d.ok ? `✓ 쓰기 가능 · 여유 ${fmt.bytes(d.free_bytes)}` : `✗ 쓰기 불가 — ${d.error}`;
+      el.textContent = d.ok ? t("✓ 쓰기 가능 · 여유 {0}", fmt.bytes(d.free_bytes)) : t("✗ 쓰기 불가 — {0}", d.error);
     } catch (e) { el.className = "small bad"; el.textContent = e.message; }
     if (radio("out_type") === "file") this.refresh();
   },
@@ -472,11 +472,11 @@ const EncoderHelper = {
     const ext = $("#of-ext").value;
     const d = new Date(), p2 = (n) => String(n).padStart(2, "0");
     const ts = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}-${p2(d.getHours())}-${p2(d.getMinutes())}-${p2(d.getSeconds())}`;
-    const dir = ($("#of-dir").value.trim() || "<저장 폴더>").replace(/\/+$/, "");
-    const segTxt = seg % 3600 === 0 ? `${seg / 3600}시간` : seg % 60 === 0 ? `${seg / 60}분` : `${seg}초`;
+    const dir = ($("#of-dir").value.trim() || t("<저장 폴더>")).replace(/\/+$/, "");
+    const segTxt = seg % 3600 === 0 ? t("{0}시간", seg / 3600) : seg % 60 === 0 ? t("{0}분", seg / 60) : t("{0}초", seg);
     $("#of-preview").innerHTML = `${esc(dir)}/${esc(this.fileBase(this.getSpec()))}_${ts}.${ext}<br>` +
-      `<span class="muted">segment ${segTxt} (${seg}s, config recording.segment_sec) 마다 새 파일 · 파일명 시각 = 파일 시작 시각` +
-      (ext === "mp4" ? " · mp4 는 +faststart 적용 (segment 종료시 moov 를 앞으로 이동). 비정상 종료시 기록중이던 mp4 는 재생 불가 — 안정성은 ts 가 유리" : "") + "</span>";
+      `<span class="muted">` + t("segment {0} ({1}s, config recording.segment_sec) 마다 새 파일 · 파일명 시각 = 파일 시작 시각", segTxt, seg) +
+      (ext === "mp4" ? t(" · mp4 는 +faststart 적용 (segment 종료시 moov 를 앞으로 이동). 비정상 종료시 기록중이던 mp4 는 재생 불가 — 안정성은 ts 가 유리") : "") + "</span>";
   },
 
   /* index (in mxPaths order) of the first path that carries a video track */
@@ -524,7 +524,7 @@ const EncoderHelper = {
       lab.innerHTML = `<input type="checkbox" value="${p}" ${prev[p] === false ? "" : "checked"}> ${esc(name)}`;
       box.append(lab);
     }
-    if (total < 2) box.innerHTML = '<span class="muted small">스테레오 쌍을 만들 채널이 부족합니다</span>';
+    if (total < 2) box.innerHTML = `<span class="muted small">${t("스테레오 쌍을 만들 채널이 부족합니다")}</span>`;
   },
 
   getSpec() {
@@ -598,15 +598,15 @@ const EncoderHelper = {
     [...$("#mx-extra").options].forEach((o) => { o.selected = mp.slice(1).includes(o.value); });
     $("#mx-transport").value = m.transport || "udp";
     $("#mx-interlaced").checked = !!m.interlaced;
-    const t = i.testsrc || {};
-    if (t.source) $("#ts-source").value = t.source;
-    if (t.standard) $("#ts-standard").value = t.standard;
-    $("#ts-custom").hidden = t.standard !== "custom";
-    $("#ts-size").value = t.size || "1920x1080";
-    $("#ts-rate").value = t.rate || "30000/1001";
-    $("#ts-inter").checked = !!t.interlaced;
-    $("#ts-ach").value = t.audio_channels || 8;
-    $("#ts-freq").value = t.sine_freq || 1000;
+    const ts = i.testsrc || {};
+    if (ts.source) $("#ts-source").value = ts.source;
+    if (ts.standard) $("#ts-standard").value = ts.standard;
+    $("#ts-custom").hidden = ts.standard !== "custom";
+    $("#ts-size").value = ts.size || "1920x1080";
+    $("#ts-rate").value = ts.rate || "30000/1001";
+    $("#ts-inter").checked = !!ts.interlaced;
+    $("#ts-ach").value = ts.audio_channels || 8;
+    $("#ts-freq").value = ts.sine_freq || 1000;
     const c = i.custom || {};
     $("#cu-args").value = c.args || "";
     $("#cu-layout").value = c.layout || "2";
@@ -689,9 +689,9 @@ const EncoderHelper = {
     $("#nvdec-row").hidden = !nvdecInput;
     const nvdecOk = this.meta?.caps?.nvdec ?? this.meta?.caps?.cuda;
     nvd.disabled = !nvdecOk || ["copy", "none"].includes($("#v-codec").value);
-    $("#nvdec-note").textContent = !nvdecOk ? "NVDEC 사용 불가"
-      : ["copy", "none"].includes($("#v-codec").value) ? "video copy/none 에서는 디코딩하지 않음"
-      : nvd.checked && !isNv($("#v-codec").value) ? "libx264 → GPU 디코딩 후 hwdownload"
+    $("#nvdec-note").textContent = !nvdecOk ? t("NVDEC 사용 불가")
+      : ["copy", "none"].includes($("#v-codec").value) ? t("video copy/none 에서는 디코딩하지 않음")
+      : nvd.checked && !isNv($("#v-codec").value) ? t("libx264 → GPU 디코딩 후 hwdownload")
       : "";
     $("#out-transport-row").hidden = !outType.startsWith("mediamtx");
     const codec = $("#v-codec").value;
@@ -700,7 +700,7 @@ const EncoderHelper = {
     const noBf = codec === "hevc_nvenc" && !this.meta?.caps?.hevc_bframes;
     if (noBf) bf.value = "0";
     bf.disabled = noBf;
-    bf.title = noBf ? "이 GPU 의 hevc_nvenc 는 B-frame 을 지원하지 않습니다 (Turing 이상 필요)" : "";
+    bf.title = noBf ? t("이 GPU 의 hevc_nvenc 는 B-frame 을 지원하지 않습니다 (Turing 이상 필요)") : "";
     // NVENC path: CUDA filters replace the CPU ones (CPU row only as a fallback when CUDA is unusable)
     const gpuFilters = isNv(codec) && !!this.meta?.caps?.cuda;
     $$(".cuda-only").forEach((e) => { e.hidden = !isNv(codec); });
@@ -713,7 +713,7 @@ const EncoderHelper = {
       else if (this.dlProgressive && el.disabled && inType === "decklink" && !el.closest("[hidden]"))
         el.value = sel === "#f-deint" ? "bwdif" : "bwdif_cuda";  // back to interlaced: restore the default
       el.disabled = progressive;
-      el.title = progressive ? "progressive 비디오 표준에서는 deinterlace 를 사용하지 않습니다" : "";
+      el.title = progressive ? t("progressive 비디오 표준에서는 deinterlace 를 사용하지 않습니다") : "";
     });
     this.dlProgressive = progressive;
     // deint output rate only means something when a (visible) deinterlacer is chosen
@@ -728,21 +728,21 @@ const EncoderHelper = {
     $$(".a-ln input[type=number]").forEach((i) => { i.disabled = !$("#a-ln").checked; });
     const notes = [];
     if (outType === "url") {
-      if ($$("#ou-list .url-row.mc").length && $("#a-codec").value === "opus") notes.push("MPEG-TS 수신기(IRD, VLC 외 다수)는 Opus 를 지원하지 않는 경우가 많습니다 — AAC 권장.");
+      if ($$("#ou-list .url-row.mc").length && $("#a-codec").value === "opus") notes.push(t("MPEG-TS 수신기(IRD, VLC 외 다수)는 Opus 를 지원하지 않는 경우가 많습니다 — AAC 권장."));
       notes.push(...this.mcastProblems());
     }
     if (outType === "file") {
       this.filePreview();
       $("#of-base").placeholder = this.fileBase(this.getSpec());
-      if (!$("#of-dir").value.trim()) notes.push("저장 폴더를 선택하세요.");
-      else if (this.dirOk === false) notes.push("저장 폴더에 쓸 수 없습니다 — 인코더가 시작되지 않습니다.");
+      if (!$("#of-dir").value.trim()) notes.push(t("저장 폴더를 선택하세요."));
+      else if (this.dirOk === false) notes.push(t("저장 폴더에 쓸 수 없습니다 — 인코더가 시작되지 않습니다."));
     }
-    if (pairs) notes.push("각 스테레오 쌍이 개별 mediamtx path 로 전송됩니다 (L/R 선택 불필요).");
+    if (pairs) notes.push(t("각 스테레오 쌍이 개별 mediamtx path 로 전송됩니다 (L/R 선택 불필요)."));
     const toMtx = outType.startsWith("mediamtx");
-    if (toMtx && ["aac", "mp3"].includes($("#a-codec").value)) notes.push("WebRTC 모니터(브라우저)는 AAC/MP3 를 재생하지 못합니다 — 모니터할 path 는 opus 권장.");
-    if (toMtx && Number($("#v-bf").value) > 0 && codec !== "copy") notes.push("WebRTC 재생에는 B-frame 0 을 권장합니다.");
+    if (toMtx && ["aac", "mp3"].includes($("#a-codec").value)) notes.push(t("WebRTC 모니터(브라우저)는 AAC/MP3 를 재생하지 못합니다 — 모니터할 path 는 opus 권장."));
+    if (toMtx && Number($("#v-bf").value) > 0 && codec !== "copy") notes.push(t("WebRTC 재생에는 B-frame 0 을 권장합니다."));
     if (inType === "decklink" && !$("#f-cuda-deint").value && !$("#f-deint").value && codec !== "copy" && this.dlInterlaced())
-      notes.push("interlaced 소스입니다 — deinterlace 필터를 고려하세요.");
+      notes.push(t("interlaced 소스입니다 — deinterlace 필터를 고려하세요."));
     $("#a-note").textContent = notes.join(" ");
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this.build(), 200);
@@ -772,14 +772,14 @@ const EncoderHelper = {
       // so the helper can be reopened, the stored cli is what runs
       helper: spec,
     };
-    if (!body.cli.trim()) { toast("command line 이 비어있습니다", true); return; }
-    if (radio("out_type") === "file" && !locked && !$("#of-dir").value.trim()) { toast("저장 폴더를 선택하세요", true); return; }
+    if (!body.cli.trim()) { toast(t("command line 이 비어있습니다"), true); return; }
+    if (radio("out_type") === "file" && !locked && !$("#of-dir").value.trim()) { toast(t("저장 폴더를 선택하세요"), true); return; }
     try {
       if (this.editing) {
         await api("PATCH", `/api/encoders/${this.editing.id}`, body);
         const card = App.encoders.get(this.editing.id);
         if (card) { card.setDirty(false); card.cli.value = body.cli; }
-        toast(locked ? "저장됨 (직접 편집한 CLI)" : "저장됨 — 다음 시작/재시작부터 적용");
+        toast(locked ? t("저장됨 (직접 편집한 CLI)") : t("저장됨 — 다음 시작/재시작부터 적용"));
       } else {
         await api("POST", "/api/encoders", body);
         toast("인코더 추가됨");
@@ -792,7 +792,7 @@ const EncoderHelper = {
     const i = spec.input;
     const src = i.type === "decklink" ? i.decklink.device : i.type === "mediamtx" ? (i.mediamtx.paths[0] || "mediamtx") : i.type === "testsrc" ? i.testsrc.source : "custom";
     const dst = spec.sink.type === "mediamtx_pairs" ? `${spec.sink.base}_*` : spec.sink.type === "mediamtx" ? spec.outputs[0]?.path : spec.sink.type === "url" ? (spec.outputs[0]?.url || "").split("/")[2] || "url"
-      : spec.sink.type === "file" ? `${spec.outputs[0]?.ext || "file"} 녹화` : "null";
+      : spec.sink.type === "file" ? t("{0} 녹화", spec.outputs[0]?.ext || "file") : "null";
     return `${src} → ${dst}`;
   },
 };
@@ -815,7 +815,7 @@ const MonitorHelper = {
     }
     this.editing = cfg;
     this.selected = cfg ? [...(cfg.paths || [])] : [];
-    $("#mon-dlg-title").textContent = cfg ? `Monitor 편집 — ${cfg.title}` : "Monitor 추가";
+    $("#mon-dlg-title").textContent = cfg ? t("Monitor 편집 — {0}", cfg.title) : t("Monitor 추가");
     $("#m-title").value = cfg ? cfg.title : "";
     $("#dlg-monitor").showModal();
     await this.load();
@@ -825,7 +825,7 @@ const MonitorHelper = {
     let d = { paths: [] };
     try { d = await api("GET", "/api/helper/paths"); } catch (_) { /* offline */ }
     this.paths = d.paths || [];
-    if (!d.ok) toast("mediamtx API 에 연결할 수 없습니다: " + (d.error || ""), true);
+    if (!d.ok) toast(t("mediamtx API 에 연결할 수 없습니다: ") + (d.error || ""), true);
     // group by prefix before the last "_" : sdi1_va12, sdi1_a34 -> sdi1
     const groups = {};
     this.paths.forEach((p) => {
@@ -856,7 +856,7 @@ const MonitorHelper = {
     const box = $("#m-paths");
     const known = this.paths.map((p) => p.name);
     const all = [...known, ...this.selected.filter((s) => !known.includes(s))];
-    box.innerHTML = all.length ? "" : '<div class="muted small">활성화된 path 가 없습니다. 아래에 직접 입력할 수 있습니다.</div>';
+    box.innerHTML = all.length ? "" : `<div class="muted small">${t("활성화된 path 가 없습니다. 아래에 직접 입력할 수 있습니다.")}</div>`;
     all.forEach((name) => {
       const p = this.paths.find((x) => x.name === name);
       const idx = this.selected.indexOf(name);
@@ -883,3 +883,17 @@ const MonitorHelper = {
     } catch (e) { toast(e.message, true); }
   },
 };
+
+/* language switch: rebuild the helper texts that are generated in JS */
+document.addEventListener("langchange", () => {
+  if ($("#dlg-encoder").open) {
+    const cfg = EncoderHelper.editing;
+    $("#helper-title").textContent = cfg ? t("Encoder 편집 — {0}", cfg.title) : t("Encoder 추가");
+    EncoderHelper.refresh();
+  }
+  if ($("#dlg-monitor").open) {
+    const cfg = MonitorHelper.editing;
+    $("#mon-dlg-title").textContent = cfg ? t("Monitor 편집 — {0}", cfg.title) : t("Monitor 추가");
+    MonitorHelper.render();
+  }
+});
