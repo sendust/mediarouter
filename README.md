@@ -136,7 +136,7 @@ journalctl -u mediarouter -f              # 콘솔 출력 (logs/backend.log 에�
 | `app/helpers.py` | DeckLink enumerate / format 조회, lavfi 소스, ffprobe, NVENC/CUDA 실측 probe |
 | `app/mediamtx.py` | mediamtx API poller (path, codec 정보, 입력 bitrate, publisher/reader 의 remote 주소) |
 | `app/sysinfo.py` | hostname, IP, CPU, RAM, NIC TX/RX, ffmpeg 프로세스 수 |
-| `app/logger.py` | 콘솔 + `logs/backend.log` (rotate) + 최근 1000건 ring buffer |
+| `app/logger.py` | 콘솔 + `logs/backend.log` (rotate) + 최근 1000건 ring buffer. UI 조작(GET 외 요청)으로 남는 로그 끝에 `(from <접속 IP>)` |
 | `app/status.py` | `/api/status` 상태 요약 / health 판정 / text 출력 |
 | `app/config.py` | config.json 로드/저장 (atomic write, 누락 키는 기본값으로 채워 기록 — 이전 파일은 `config.json.bak`, 기록 실패시 경고만 남기고 기본값으로 동작) |
 | `web/index.html`, `app.js` | UI (vanilla JS), 인코더/모니터 카드, 시스템, 로그 |

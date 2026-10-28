@@ -15,7 +15,7 @@ from . import helpers, status
 from .cli_builder import DECKLINK_FORMATS, LAVFI_VIDEO_SOURCES, VIDEO_STANDARDS, build_cli, suggest_pair_paths
 from .config import ConfigStore
 from .fflog import FFReportWatchdog
-from .logger import get_logger, ring, setup_logging
+from .logger import ClientIPMiddleware, get_logger, ring, setup_logging
 from .manager import EncoderManager
 from .mediamtx import MediaMTXPoller
 from .subtitles import RecordingSubtitler
@@ -60,6 +60,7 @@ async def lifespan(_app):
 
 
 app = FastAPI(title="mediarouter", lifespan=lifespan)
+app.add_middleware(ClientIPMiddleware)
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
 
@@ -129,6 +130,7 @@ def add_encoder(data: dict = Body(...)):
 @app.post("/api/encoders/order")
 def order_encoders(data: dict = Body(...)):
     store.reorder("encoders", data.get("ids", []))
+    log.info("encoder order changed")
     return {"ok": True}
 
 
@@ -194,6 +196,7 @@ def add_monitor(data: dict = Body(...)):
 @app.post("/api/monitors/order")
 def order_monitors(data: dict = Body(...)):
     store.reorder("monitors", data.get("ids", []))
+    log.info("monitor order changed")
     return {"ok": True}
 
 
@@ -202,6 +205,7 @@ def patch_monitor(mon_id: str, data: dict = Body(...)):
     m = store.update_item("monitors", mon_id, data)
     if m is None:
         raise HTTPException(404, "monitor not found")
+    log.info("monitor updated: %s (%s)", m.get("title"), ", ".join(sorted(data)))
     return m
 
 

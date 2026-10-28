@@ -198,6 +198,7 @@ class Encoder:
         """Restart the ffmpeg process while keeping the supervisor (session) alive."""
         if not self.running():
             return self.start()
+        log.info("[%s] restart requested (%s)", self.title, reason)
         self._kick_reason = reason
         self._kick_evt.set()
         return True

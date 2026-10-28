@@ -5,13 +5,51 @@ The ring buffer (skill §6) lets the web UI show the most recent N records
 without any separate log shipping; every record gets a monotonically
 increasing sequence number so the UI can fetch only what it has not seen.
 """
+import contextvars
 import logging
 import logging.handlers
 import os
 import threading
 from collections import deque
 
-LOG_FORMAT = "%(asctime)s.%(msecs)03d %(levelname)-7s [%(name)s] %(message)s"
+LOG_FORMAT = "%(asctime)s.%(msecs)03d %(levelname)-7s [%(name)s] %(message)s%(client)s"
+
+# IP of the web client whose request (a UI action) is being handled; set by ClientIPMiddleware.
+# Records logged while handling it end with " (from <ip>)"; background threads log without it.
+client_ip = contextvars.ContextVar("client_ip", default=None)
+_factory = logging.getLogRecordFactory()
+
+
+def _record_factory(*args, **kwargs):
+    rec = _factory(*args, **kwargs)
+    ip = client_ip.get()
+    rec.client = f" (from {ip})" if ip else ""
+    return rec
+
+
+logging.setLogRecordFactory(_record_factory)
+
+
+class ClientIPMiddleware:
+    """ASGI middleware: tag state-changing requests (anything but GET/HEAD) with the client IP.
+    X-Forwarded-For is honoured only from a local reverse proxy."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope["method"] in ("GET", "HEAD"):
+            return await self.app(scope, receive, send)
+        ip = (scope.get("client") or ("?",))[0]
+        if ip in ("127.0.0.1", "::1"):
+            fwd = dict(scope.get("headers") or []).get(b"x-forwarded-for")
+            if fwd:
+                ip = fwd.decode("latin-1").split(",")[0].strip() or ip
+        token = client_ip.set(ip)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            client_ip.reset(token)
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
@@ -77,7 +115,7 @@ def setup_logging(cfg, base_dir):
 
     _ring = RingBufferHandler(int(cfg.get("ring_size", 1000)))
     # the UI shows timestamp/level in separate columns; keep the message plain
-    _ring.setFormatter(logging.Formatter("%(message)s"))
+    _ring.setFormatter(logging.Formatter("%(message)s%(client)s"))
     root.addHandler(_ring)
 
     # uvicorn access log is noisy (SSE + polling); keep it out of the ring buffer
