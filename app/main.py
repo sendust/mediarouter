@@ -28,6 +28,8 @@ CONFIG_PATH = os.environ.get("MEDIAROUTER_CONFIG", os.path.join(BASE_DIR, "confi
 store = ConfigStore(CONFIG_PATH)
 setup_logging(store.section("logging"), BASE_DIR)
 log = get_logger("main")
+for _lvl, _msg in store.load_messages:
+    getattr(log, _lvl)(_msg)
 
 manager = EncoderManager(store, BASE_DIR)
 mtx = MediaMTXPoller(store)

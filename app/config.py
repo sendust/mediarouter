@@ -2,6 +2,7 @@
 import copy
 import json
 import os
+import shutil
 import threading
 import uuid
 
@@ -94,6 +95,7 @@ class ConfigStore:
         self.path = path
         self._lock = threading.RLock()
         self.data = {}
+        self.load_messages = []  # (level, text) from load(); logged by main once logging is set up
         self.load()
 
     def load(self):
@@ -110,7 +112,26 @@ class ConfigStore:
             for m in self.data["monitors"]:
                 m.setdefault("id", new_id("mon"))
             if raw != self.data:
-                self.save()  # write back new default keys so the file documents every option
+                self._write_back(os.path.exists(self.path))
+
+    def _write_back(self, existed):
+        """Write new default keys back so the file documents every option (after an upgrade).
+        The previous file is kept as <config>.bak. Failure only warns: defaults still apply in memory."""
+        bak = self.path + ".bak"
+        if existed:
+            try:
+                shutil.copy2(self.path, bak)
+            except OSError as e:
+                self.load_messages.append(("warning", f"config backup {bak} failed: {e}"))
+                bak = None
+        try:
+            self.save()
+        except OSError as e:
+            self.load_messages.append(("warning", f"config write-back {self.path} failed: {e} "
+                                                  "(running with defaults for the missing keys)"))
+            return
+        self.load_messages.append(("info", f"config {self.path} updated with new default keys"
+                                           + (f" (previous file: {bak})" if existed and bak else "")))
 
     def save(self):
         with self._lock:
