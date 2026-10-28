@@ -43,6 +43,7 @@ DEFAULTS = {
     "recording": {
         "segment_sec": 3600,   # file output: one file per segment (seconds)
         "default_dir": "",     # folder browser start (empty = backend user's home)
+        "srt": True,           # write a 1 s timestamp .srt next to every new segment file
     },
     "logging": {
         "dir": "logs",

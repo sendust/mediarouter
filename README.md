@@ -24,7 +24,7 @@ DeckLink ─ ffmpeg ─▶ mediamtx (sdiN_va12, sdiN_a34 …) ─ ffmpeg ─▶ 
   - 비디오: h264_nvenc / hevc_nvenc / libx264 / stream copy / none, CPU 또는 CUDA deinterlace(bwdif/yadif/estdif)·scale, GOP, B-frame
   - hevc_nvenc: profile main / main10 (main10 은 p010 10-bit 로 변환). Pascal (P2200 등) 은 HEVC B-frame 미지원 → helper 가 0 으로 고정
   - 출력: mediamtx (N audio stream — 스테레오 쌍마다 별도 path), mediamtx path, 외부 URL 여러개 (tee), 파일 (녹화), null
-  - 파일 출력 (녹화): ts / mp4, segment 단위 분할 (`recording.segment_sec`, 기본 3600초), mp4 는 `+faststart`.
+  - 파일 출력 (녹화): ts / mp4, segment 단위 분할 (`recording.segment_sec`, 기본 3600초), mp4 는 `+faststart`. 새 segment 파일마다 같은 이름의 `.srt` (1초 간격 시각 자막 `YYYY/MM/DD  HH:MM.SS`) 를 생성.
     파일명 `<저장 폴더>/<base filename>_YYYY-MM-DD-HH-MM-SS.<ext>` (segment 시작 시각). 저장 폴더는 서버 파일시스템을 탐색해
     선택하며 선택시 쓰기 가능 여부를 실제 파일 생성으로 확인하고 로그에 남깁니다. base filename 기본값은 인코더 타이틀
     (파일명 안전 문자로 변환: 문자·숫자·`.` `-` `_` 외에는 `_`)
@@ -166,7 +166,7 @@ journalctl -u mediarouter -f              # 콘솔 출력 (logs/backend.log 에�
 - `ffreport_watchdog` — `dir`, `loglevel`, `max_size_mb`, `backup_count`, `check_interval_sec`, `tail_lines`,
   `restart_on_patterns` (정규식 목록; fflog 에 매칭되면 재시작. 예: `"Connection refused"`).
   fflog 크기는 rotate 만 하고 재시작 사유가 되지 않습니다.
-- `recording` — `segment_sec` (파일 출력 segment 길이, 기본 3600), `default_dir` (폴더 탐색 시작 위치, 비우면 백엔드 사용자 home).
+- `recording` — `segment_sec` (파일 출력 segment 길이, 기본 3600), `default_dir` (폴더 탐색 시작 위치, 비우면 백엔드 사용자 home), `srt` (segment 파일마다 시각 자막 .srt 생성, 기본 true).
   segment 길이는 helper 가 CLI 를 만들 때 들어가므로, 바꾼 뒤에는 인코더를 helper 에서 다시 저장해야 적용됩니다
 - `logging` — `dir`, `level`, `max_size_mb`, `backup_count`, `ring_size`
 - `encoders[]` — `title`, `comment`, `cli` (실행되는 텍스트 그대로), `autostart`, `auto_restart`, `speed_restart`,

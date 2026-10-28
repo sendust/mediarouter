@@ -41,7 +41,8 @@
   },
   "recording": {
     "segment_sec": 3600,
-    "default_dir": ""
+    "default_dir": "",
+    "srt": true
   },
   "logging": {
     "dir": "logs",

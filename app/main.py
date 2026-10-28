@@ -18,6 +18,7 @@ from .fflog import FFReportWatchdog
 from .logger import get_logger, ring, setup_logging
 from .manager import EncoderManager
 from .mediamtx import MediaMTXPoller
+from .subtitles import RecordingSubtitler
 from .sysinfo import SysInfo
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -33,6 +34,7 @@ mtx = MediaMTXPoller(store)
 sysinfo = SysInfo()
 STARTED_AT = time.time()
 ffreport = FFReportWatchdog(manager, store.section("ffreport_watchdog"))
+subtitler = RecordingSubtitler(store)
 
 
 @asynccontextmanager
@@ -45,11 +47,12 @@ async def lifespan(_app):
     sysinfo.start()
     mtx.start()
     ffreport.start()
+    subtitler.start()
     manager.autostart()
     yield
     log.info("mediarouter backend shutting down")
     await asyncio.to_thread(manager.shutdown)
-    for t in (ffreport, mtx, sysinfo):
+    for t in (subtitler, ffreport, mtx, sysinfo):
         t.stop()
 
 
