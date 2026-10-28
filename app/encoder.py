@@ -26,6 +26,8 @@ from .logger import get_logger
 log = get_logger("encoder")
 
 ENV_MARK = "MEDIAROUTER_ENCODER_ID"
+# mediamtx path state unknown (backend just started / API down): wait this long, then start anyway
+UNKNOWN_GRACE_SEC = 10.0
 # SIGINT grace for mp4 +faststart recordings (the moov move rewrites the whole last segment)
 MP4_FINALIZE_SEC = 60.0
 
@@ -252,12 +254,14 @@ class Encoder:
 
     def _wait_paths(self):
         """Hold the (re)start until every mediamtx source path of the CLI is ready.
-        Unknown state (mediamtx API down / not polled yet) does not block. False = stopped meanwhile."""
+        Unknown state (mediamtx API down / not polled yet) blocks for at most UNKNOWN_GRACE_SEC.
+        False = stopped meanwhile."""
         ready = self.app_cfg("_path_ready")
         paths = source_paths(self.cfg.get("cli"), self.app_cfg("mediamtx").get("rtsp_url")) if ready else []
-        t0, shown = None, None
+        t0, shown, began = None, None, time.time()
         while paths:
-            missing = [p for p in paths if ready(p) is False]
+            unknown_ok = time.time() - began >= UNKNOWN_GRACE_SEC
+            missing = [p for p in paths if ready(p) is False or (ready(p) is None and not unknown_ok)]
             if not missing:
                 break
             if missing != shown:
