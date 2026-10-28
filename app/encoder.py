@@ -15,6 +15,7 @@ import signal
 import subprocess
 import threading
 import time
+import urllib.parse
 from collections import deque
 
 import psutil
@@ -49,6 +50,23 @@ PROGRESS_KEYS = ("frame", "fps", "bitrate", "total_size", "out_time", "speed",
 def split_cli(cli):
     text = cli.replace("\\\r\n", " ").replace("\\\n", " ")
     return shlex.split(text, comments=False, posix=True)
+
+
+def source_paths(cli, rtsp_url):
+    """mediamtx path names read by the CLI: -i rtsp://<mediamtx host:port>/<path>."""
+    mtx = urllib.parse.urlsplit(rtsp_url or "")
+    local = {mtx.hostname, "127.0.0.1", "localhost"}
+    args = split_cli(cli or "")
+    out = []
+    for i, a in enumerate(args[:-1]):
+        if a != "-i":
+            continue
+        u = urllib.parse.urlsplit(args[i + 1])
+        if u.scheme in ("rtsp", "rtsps") and u.hostname in local and (u.port or 554) == (mtx.port or 554):
+            name = u.path.strip("/")
+            if name and name not in out:
+                out.append(name)
+    return out
 
 
 def build_argv(cli, ffmpeg_path, loglevel):
@@ -192,6 +210,8 @@ class Encoder:
     def _supervise(self):
         wd = self.app_cfg("encoder_watchdog")
         while not self._stop_evt.is_set():
+            if not self._wait_paths():
+                break
             reason, rc, ran_for = self._run_once()
             self.last_exit_code = rc
             if self._stop_evt.is_set():
@@ -229,6 +249,34 @@ class Encoder:
             self.state = "stopped"
         self.started_at = None
         self.next_sched = None
+
+    def _wait_paths(self):
+        """Hold the (re)start until every mediamtx source path of the CLI is ready.
+        Unknown state (mediamtx API down / not polled yet) does not block. False = stopped meanwhile."""
+        ready = self.app_cfg("_path_ready")
+        paths = source_paths(self.cfg.get("cli"), self.app_cfg("mediamtx").get("rtsp_url")) if ready else []
+        t0, shown = None, None
+        while paths:
+            missing = [p for p in paths if ready(p) is False]
+            if not missing:
+                break
+            if missing != shown:
+                shown = missing
+                self.state = "waiting"
+                self.last_reason = "waiting for mediamtx path " + ", ".join(missing)
+                if t0 is None:
+                    t0 = time.time()
+                    log.warning("[%s] %s (not ready)", self.title, self.last_reason)
+                    self.fflog.mark(self.last_reason)
+            if self._stop_evt.wait(1.0):
+                return False
+        if t0 is not None:
+            self._kick_evt.clear()  # a manual restart pressed while waiting is already satisfied
+            self._fail_streak = 0  # a missing source is not this encoder's failure: no long backoff
+            log.info("[%s] mediamtx path %s ready after %.0fs, starting", self.title, ", ".join(paths), time.time() - t0)
+            self.fflog.mark("mediamtx path ready, starting")
+            self.last_reason = "mediamtx path ready"
+        return True
 
     def _spawn(self):
         ff = self.app_cfg("ffmpeg")

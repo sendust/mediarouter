@@ -331,7 +331,7 @@ class EncoderCard {
       sb.textContent = `SLOW ${st.speed_now.toFixed(2)}x`;
       sb.title = t("최근 구간 처리속도 {0}x (실시간 미달) — {1} 째", st.speed_now.toFixed(2), fmt.dur(st.slow_for));
     }
-    const active = ["running", "starting", "restarting", "stopping"].includes(st.state);
+    const active = ["running", "starting", "restarting", "waiting", "stopping"].includes(st.state);
     $('[data-a="start"]', this.el).disabled = active;
     $('[data-a="stop"]', this.el).disabled = !active;
     const p = st.progress || {};
@@ -354,7 +354,7 @@ class EncoderCard {
     if (st.restart_in != null) cells.splice(1, 1, ["restart in", st.restart_in.toFixed(1) + "s"]);
     $(".stats", this.el).innerHTML = cells.map(([k, v]) => `<div><span>${k}</span><b title="${esc(k === "bitrate" ? this.bitrateTip || v : v)}">${esc(v)}</b></div>`).join("");
     const err = $(".err", this.el);
-    let msg = ["error", "restarting"].includes(st.state) ? st.last_reason : "";
+    let msg = ["error", "restarting", "waiting"].includes(st.state) ? st.last_reason : "";
     if (st.last_error) msg = (msg ? msg + " — " : "") + t("{0}  ({1} 전)", st.last_error, fmt.dur(st.last_error_age));
     err.hidden = !msg;
     err.textContent = msg;

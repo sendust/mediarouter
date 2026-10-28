@@ -31,6 +31,7 @@ log = get_logger("main")
 
 manager = EncoderManager(store, BASE_DIR)
 mtx = MediaMTXPoller(store)
+manager.path_ready = mtx.path_ready
 sysinfo = SysInfo()
 STARTED_AT = time.time()
 ffreport = FFReportWatchdog(manager, store.section("ffreport_watchdog"))

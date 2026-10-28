@@ -99,6 +99,14 @@ class MediaMTXPoller(threading.Thread):
         out.sort(key=lambda x: x["name"] or "")
         self.snapshot = {"ok": True, "error": "", "paths": out, "ts": time.time()}
 
+    def path_ready(self, name):
+        """True/False for a mediamtx path, None when the API state is unknown or stale."""
+        snap = self.snapshot
+        stale = 3 * float(self.store.section("mediamtx").get("poll_interval_sec", 2)) + 5
+        if not snap.get("ok") or time.time() - snap.get("ts", 0) > stale:
+            return None
+        return any(p["name"] == name and p["ready"] for p in snap["paths"])
+
     def run(self):
         while True:
             try:

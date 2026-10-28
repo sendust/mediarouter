@@ -15,6 +15,7 @@ DeckLink ─ ffmpeg ─▶ mediamtx (sdiN_va12, sdiN_a34 …) ─ ffmpeg ─▶ 
 - **인코더 카드** — 인코더 1개 = ffmpeg 프로세스 1개 (OS 스레드 1개가 감시)
   - 실행/정지/재시작, 오류시 자동재시작 (backoff), 예약 재시작 (매일 / 주기), 백엔드 시작시 자동실행
   - progress 정지(hang) 감지, 속도저하(speed < 기준) 감지/재시작, fflog 패턴 매칭 재시작
+  - 입력이 mediamtx path (`-i rtsp://<mediamtx>/<path>`) 인 인코더는 그 path 가 ready 가 될 때까지 (재)시작을 보류 (`waiting` 상태, 1초 간격 확인)
   - ffmpeg CLI 직접 편집 (복사/붙여넣기), fflog 보기, 실제 사용중인 video/audio 코덱, CPU/RAM, fps, bitrate, speed
   - 실행중인 카드는 붉은 테두리, 속도저하는 노란 테두리
 - **Encoder helper** — 입력/출력을 고르면 CLI 를 생성

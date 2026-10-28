@@ -47,6 +47,9 @@ def _encoder(cfg, st, path_bps, now):
     if state in ("error", "restarting"):
         level = ERROR
         issues.append(f"{state}: {st.get('last_reason') or st.get('last_error') or '-'}")
+    elif state == "waiting":
+        level = WARN
+        issues.append(st.get("last_reason") or "waiting")
     elif state in ("stopped", "finished") and cfg.get("autostart"):
         level = WARN
         issues.append("autostart 인코더가 정지 상태")

@@ -17,12 +17,15 @@ class EncoderManager:
         self.base_dir = base_dir
         self._lock = threading.RLock()
         self._enc = {}
+        self.path_ready = None  # mediamtx path -> True/False/None, set by main
         for cfg in store.items("encoders"):
             self._enc[cfg["id"]] = Encoder(cfg, self.app_cfg)
 
     def app_cfg(self, name):
         if name == "_base_dir":
             return self.base_dir
+        if name == "_path_ready":
+            return self.path_ready
         return self.store.section(name)
 
     # --------------------------------------------------------------- lookup
