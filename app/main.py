@@ -243,6 +243,24 @@ def helper_decklink_formats(device: str):
     return helpers.decklink_formats(store.section("ffmpeg")["path"], device)
 
 
+@app.get("/api/helper/alsa")
+def helper_alsa():
+    return {"devices": helpers.alsa_devices(), "alsa": helpers.capabilities(store.section("ffmpeg")["path"]).get("alsa")}
+
+
+@app.get("/api/helper/alsa/mixer")
+def helper_alsa_mixer(card: str):
+    return helpers.alsa_mixer(card)
+
+
+@app.post("/api/helper/alsa/mixer")
+def helper_alsa_mixer_set(data: dict = Body(...)):
+    try:
+        return helpers.alsa_mixer_set(data.get("card", ""), data.get("control", ""), data.get("kind", ""), data.get("value"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @app.get("/api/helper/paths")
 def helper_paths():
     snap = mtx.snapshot

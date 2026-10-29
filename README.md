@@ -19,7 +19,10 @@ DeckLink ─ ffmpeg ─▶ mediamtx (sdiN_va12, sdiN_a34 …) ─ ffmpeg ─▶ 
   - ffmpeg CLI 직접 편집 (복사/붙여넣기), fflog 보기, 실제 사용중인 video/audio 코덱, CPU/RAM, fps, bitrate, speed
   - 실행중인 카드는 붉은 테두리, 속도저하는 노란 테두리
 - **Encoder helper** — 입력/출력을 고르면 CLI 를 생성
-  - 입력: DeckLink (장치/포맷/채널수), mediamtx path (여러 path 의 오디오를 합쳐서 사용 가능), testsrc (lavfi), custom
+  - 입력: DeckLink (장치/포맷/채널수), mediamtx path (여러 path 의 오디오를 합쳐서 사용 가능), ALSA (오디오 전용), testsrc (lavfi), custom
+  - ALSA 입력: 모든 사운드카드의 캡처 장치 선택 (`plughw:CARD=<id>,DEV=<n>`), 기본 출력 = mediamtx path `alsa_<card>` 에 stereo opus 1 stream.
+    "녹음 믹서…" 대화창에서 카드별 capture volume / capture switch / input source 조절 (`amixer`).
+    필요: ALSA 를 포함해 빌드한 ffmpeg (`libasound2-dev`), `alsa-utils`, 백엔드 사용자가 `audio` 그룹 멤버
   - 오디오: 스테레오 출력마다 L, R 채널을 임의의 입력/채널에서 선택, loudnorm (I / LRA / TP)
   - NVDEC (GPU 디코딩) — mediamtx / custom 입력. 프레임을 GPU 메모리에 두고 CUDA 필터 → NVENC 로 바로 전달 (CPU 필터/libx264 사용시 자동 hwdownload)
   - 비디오: h264_nvenc / hevc_nvenc / libx264 / stream copy / none, CPU 또는 CUDA deinterlace(bwdif/yadif/estdif)·scale, GOP, B-frame

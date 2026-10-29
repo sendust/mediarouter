@@ -51,6 +51,14 @@ const EncoderHelper = {
     });
     $("#ts-standard").addEventListener("change", () => { $("#ts-custom").hidden = $("#ts-standard").value !== "custom"; this.refresh(); });
     $("#dl-query").addEventListener("click", () => this.queryFormats());
+    $("#al-refresh").addEventListener("click", () => this.loadAlsa().then(() => this.refresh()));
+    $("#al-device").addEventListener("change", () => {
+      // keep following the device while the path name is still the generated one
+      if (/^alsa_/.test($("#om-path").value)) $("#om-path").value = this.alsaPath();
+      this.refresh();
+    });
+    $("#al-channels").addEventListener("change", () => this.refresh());
+    $("#al-mixer").addEventListener("click", () => MixerDialog.open(this.alsaDev()?.card));
     $("#mx-refresh").addEventListener("click", () => this.loadPaths());
     $("#mx-probe").addEventListener("click", () => this.probe());
     $("#ou-add").addEventListener("click", () => { this.addUrl(); this.refresh(); });
@@ -125,7 +133,7 @@ const EncoderHelper = {
     $("#caps-warn").hidden = !warn.length;
     $("#caps-warn").textContent = warn.length ? t("이 시스템에서 {0} — libx264 / CPU filter 를 사용하세요.", warn.join(" / ")) : "";
 
-    await Promise.all([this.loadDevices(), this.loadPaths(), this.loadLocalIps()]);
+    await Promise.all([this.loadDevices(), this.loadPaths(), this.loadLocalIps(), this.loadAlsa()]);
     $("#ou-list").innerHTML = "";
     $("#e-cli-lock").checked = false;
 
@@ -161,6 +169,26 @@ const EncoderHelper = {
       $("#e-cli").value = cfg.cli || "";
     }
     this.refresh();
+  },
+
+  async loadAlsa() {
+    try { this.alsa = await api("GET", "/api/helper/alsa"); } catch (_) { this.alsa = { devices: [] }; }
+    const sel = $("#al-device");
+    const keep = sel.value;
+    const devs = this.alsa.devices || [];
+    opts(sel, devs.map((d) => d.device), devs.map((d) => `${d.card}: ${d.pcm_name} (${d.device})${d.busy ? t(" — 사용중") : ""}`));
+    if (!devs.length) sel.innerHTML = `<option value="">${t("(ALSA 캡처 장치 없음)")}</option>`;
+    if (keep && devs.some((d) => d.device === keep)) sel.value = keep;
+  },
+
+  alsaDev() {
+    return (this.alsa?.devices || []).find((d) => d.device === $("#al-device").value);
+  },
+
+  /* default mediamtx path for the chosen ALSA device: alsa_<card>[_<pcm>] */
+  alsaPath() {
+    const d = this.alsaDev();
+    return d ? `alsa_${d.card.toLowerCase()}${d.pcm ? "_" + d.pcm : ""}` : "alsa1";
   },
 
   async loadDevices() {
@@ -386,7 +414,7 @@ const EncoderHelper = {
     const inType = radio("in_type");
     const caps = (this.meta && this.meta.caps) || {};
     const live = inType === "decklink" || inType === "testsrc";
-    setRadio("out_type", live ? "mediamtx_pairs" : "url");
+    setRadio("out_type", inType === "alsa" ? "mediamtx" : live ? "mediamtx_pairs" : "url");
     $("#v-codec").value = caps.nvenc ? "h264_nvenc" : "libx264";
     this.codecLists();
     const interlaced = inType === "decklink" || (inType === "testsrc" && ($("#ts-standard").value || "1080i5994").includes("i"));
@@ -400,8 +428,14 @@ const EncoderHelper = {
     $("#v-gop").value = 30;
     $("#v-bf").value = 0;
     $("#v-zl").checked = live;
-    $("#a-codec").value = live ? "opus" : "aac";
+    $("#a-codec").value = live || inType === "alsa" ? "opus" : "aac";
     $("#a-br").value = "128k";
+    if (inType === "alsa") {
+      // audio only: one stereo opus stream on a mediamtx path
+      $("#om-path").value = this.alsaPath();
+      $("#a-left").value = "0";
+      $("#a-right").value = Number($("#al-channels").value) > 1 ? "1" : "0";
+    }
     if (inType === "testsrc") $("#op-base").value = "test1";
     if (inType === "decklink") {
       const d = this.devices[$("#dl-device").selectedIndex];
@@ -415,6 +449,7 @@ const EncoderHelper = {
     const inType = radio("in_type");
     if (inType === "decklink") return [{ input: 0, index: 0, channels: Number($("#dl-channels").value), label: "decklink" }];
     if (inType === "testsrc") return [{ input: 1, index: 0, channels: Number($("#ts-ach").value) || 1, label: "testsrc" }];
+    if (inType === "alsa") return [{ input: 0, index: 0, channels: Number($("#al-channels").value) || 2, label: "alsa" }];
     if (inType === "custom") {
       return ($("#cu-layout").value || "2").split(",").map((n, i) => ({ input: 0, index: i, channels: Number(n) || 2, label: `0:a:${i}` }));
     }
@@ -547,6 +582,7 @@ const EncoderHelper = {
           audio_channels: Number($("#ts-ach").value), sine_freq: Number($("#ts-freq").value),
         },
         custom: { args: $("#cu-args").value, layout: $("#cu-layout").value },
+        alsa: { device: $("#al-device").value, channels: Number($("#al-channels").value), sample_rate: Number($("#al-sr").value) },
       },
       audio_layout: this.layout,
       sink: { type: outType, base: $("#op-base").value, pairs: $$("#op-pairs input:checked").map((i) => Number(i.value)),
@@ -598,6 +634,15 @@ const EncoderHelper = {
     [...$("#mx-extra").options].forEach((o) => { o.selected = mp.slice(1).includes(o.value); });
     $("#mx-transport").value = m.transport || "udp";
     $("#mx-interlaced").checked = !!m.interlaced;
+    const al = i.alsa || {};
+    if (al.device) {
+      if (![...$("#al-device").options].some((o) => o.value === al.device)) {
+        $("#al-device").insertAdjacentHTML("beforeend", `<option value="${esc(al.device)}">${esc(al.device)} ${t("(없음)")}</option>`);
+      }
+      $("#al-device").value = al.device;
+    }
+    $("#al-channels").value = String(al.channels || 2);
+    $("#al-sr").value = String(al.sample_rate || 48000);
     const ts = i.testsrc || {};
     if (ts.source) $("#ts-source").value = ts.source;
     if (ts.standard) $("#ts-standard").value = ts.standard;
@@ -683,6 +728,16 @@ const EncoderHelper = {
     const outType = radio("out_type");
     $$(".in-pane").forEach((p) => { p.hidden = p.dataset.pane !== inType; });
     $$(".out-pane").forEach((p) => { p.hidden = p.dataset.pane !== outType; });
+    // ALSA is audio only: no video encoder
+    $("#v-codec").disabled = inType === "alsa";
+    if (inType === "alsa") {
+      $("#v-codec").value = "none";
+      const d = this.alsaDev();
+      $("#al-note").textContent = this.alsa?.alsa === false
+        ? t("이 ffmpeg 는 ALSA 입력(-f alsa)을 지원하지 않습니다 — libasound2-dev 설치 후 ffmpeg 재빌드가 필요합니다.")
+        : d?.busy ? t("이 장치는 다른 프로세스가 사용중입니다 — 인코더가 시작되지 않을 수 있습니다.") : "";
+      $("#al-mixer").disabled = !d;
+    }
     // NVDEC only for compressed inputs, and only when the video is decoded at all
     const nvd = $("#in-nvdec");
     const nvdecInput = ["mediamtx", "custom"].includes(inType);
@@ -790,7 +845,7 @@ const EncoderHelper = {
 
   autoTitle(spec) {
     const i = spec.input;
-    const src = i.type === "decklink" ? i.decklink.device : i.type === "mediamtx" ? (i.mediamtx.paths[0] || "mediamtx") : i.type === "testsrc" ? i.testsrc.source : "custom";
+    const src = i.type === "decklink" ? i.decklink.device : i.type === "mediamtx" ? (i.mediamtx.paths[0] || "mediamtx") : i.type === "testsrc" ? i.testsrc.source : i.type === "alsa" ? (i.alsa.device || "alsa") : "custom";
     const dst = spec.sink.type === "mediamtx_pairs" ? `${spec.sink.base}_*` : spec.sink.type === "mediamtx" ? spec.outputs[0]?.path : spec.sink.type === "url" ? (spec.outputs[0]?.url || "").split("/")[2] || "url"
       : spec.sink.type === "file" ? t("{0} 녹화", spec.outputs[0]?.ext || "file") : "null";
     return `${src} → ${dst}`;
@@ -884,6 +939,94 @@ const MonitorHelper = {
   },
 };
 
+/* ------------------------------------------------------------ ALSA recording mixer */
+const MixerDialog = {
+  card: null,
+  timers: {},
+
+  async open(card) {
+    const dlg = $("#dlg-mixer");
+    if (!this.ready) {
+      this.ready = true;
+      $("#mix-card").addEventListener("change", () => { this.card = $("#mix-card").value; this.load(); });
+      $("#mix-refresh").addEventListener("click", () => this.load());
+      $("#mix-list").addEventListener("input", (e) => this.onInput(e, false));
+      $("#mix-list").addEventListener("change", (e) => this.onInput(e, true));
+    }
+    // every card that has a capture device (several ALSA cards are fine)
+    const cards = [...new Map((EncoderHelper.alsa?.devices || []).map((d) => [d.card, d.card_name])).entries()];
+    opts($("#mix-card"), cards.map(([c]) => c), cards.map(([c, n]) => `${c} — ${n}`));
+    this.card = card || cards[0]?.[0] || "";
+    $("#mix-card").value = this.card;
+    dlg.showModal();
+    await this.load();
+  },
+
+  async load() {
+    const box = $("#mix-list");
+    if (!this.card) { box.innerHTML = `<div class="muted small">${t("(ALSA 캡처 장치 없음)")}</div>`; return; }
+    box.innerHTML = `<div class="muted small">${t("불러오는 중…")}</div>`;
+    let d;
+    try { d = await api("GET", `/api/helper/alsa/mixer?card=${encodeURIComponent(this.card)}`); } catch (e) { d = { controls: [], error: e.message }; }
+    if (d.error) { box.innerHTML = `<div class="bad small">${esc(d.error)}</div>`; return; }
+    if (!d.controls.length) { box.innerHTML = `<div class="muted small">${t("이 카드에는 녹음 관련 믹서 컨트롤이 없습니다.")}</div>`; return; }
+    box.innerHTML = d.controls.map((c) => `<div class="mix-row" data-id="${esc(c.id)}"></div>`).join("");
+    d.controls.forEach((c) => this.renderRow(c));
+  },
+
+  renderRow(c) {
+    const row = $(`.mix-row[data-id="${CSS.escape(c.id)}"]`, $("#mix-list"));
+    if (!row) return;
+    const ch = c.channels[0] || {};
+    const sw = c.channels.length ? c.channels.every((x) => x.on !== false) : false;
+    const name = c.index ? `${c.name} ${c.index}` : c.name;
+    let html = `<span class="mix-name" title="${esc(c.id)}">${esc(name)}</span>`;
+    if (c.volume && c.max != null) {
+      html += `<input type="range" class="mix-vol" min="${c.min}" max="${c.max}" step="1" value="${ch.value ?? c.min}">` +
+        `<span class="mix-val">${this.valText(c)}</span>`;
+    } else {
+      html += `<span class="mix-fill"></span>`;
+    }
+    if (c.switch) html += `<label class="mix-sw-l"><input type="checkbox" class="mix-sw"${sw ? " checked" : ""}> ${t("캡처")}</label>`;
+    if (c.enum) {
+      html += `<select class="mix-enum">${c.items.map((it) => `<option${it === c.item ? " selected" : ""}>${esc(it)}</option>`).join("")}</select>`;
+    }
+    row.innerHTML = html;
+  },
+
+  valText(c) {
+    const ch = c.channels[0] || {};
+    const parts = [`${ch.value ?? "-"}/${c.max}`];
+    if (ch.percent != null) parts.push(`${ch.percent}%`);
+    if (ch.db != null) parts.push(`${ch.db > 0 ? "+" : ""}${ch.db.toFixed(1)} dB`);
+    return parts.join(" · ");
+  },
+
+  onInput(e, final) {
+    const row = e.target.closest(".mix-row");
+    if (!row) return;
+    const id = row.dataset.id;
+    let kind, value;
+    if (e.target.classList.contains("mix-vol")) { kind = "volume"; value = Number(e.target.value); }
+    else if (e.target.classList.contains("mix-sw")) { if (!final) return; kind = "switch"; value = e.target.checked; }
+    else if (e.target.classList.contains("mix-enum")) { if (!final) return; kind = "enum"; value = e.target.value; }
+    else return;
+    // slider: follow the drag at most every 120 ms, always send the final value
+    clearTimeout(this.timers[id]);
+    this.timers[id] = setTimeout(() => this.send(id, kind, value, final), final ? 0 : 120);
+  },
+
+  async send(id, kind, value, final) {
+    try {
+      const c = await api("POST", "/api/helper/alsa/mixer", { card: this.card, control: id, kind, value });
+      const row = $(`.mix-row[data-id="${CSS.escape(id)}"]`, $("#mix-list"));
+      // while dragging only update the readout, so the slider under the pointer isn't re-created
+      if (kind === "volume" && !final) { const v = row && $(".mix-val", row); if (v) v.textContent = this.valText(c); }
+      else this.renderRow(c);
+    } catch (e) { toast(e.message, true); }
+  },
+};
+
 /* language switch: rebuild the helper texts that are generated in JS */
 document.addEventListener("langchange", () => {
   if ($("#dlg-encoder").open) {
@@ -891,6 +1034,7 @@ document.addEventListener("langchange", () => {
     $("#helper-title").textContent = cfg ? t("Encoder 편집 — {0}", cfg.title) : t("Encoder 추가");
     EncoderHelper.refresh();
   }
+  if ($("#dlg-mixer").open) MixerDialog.load();
   if ($("#dlg-monitor").open) {
     const cfg = MonitorHelper.editing;
     $("#mon-dlg-title").textContent = cfg ? t("Monitor 편집 — {0}", cfg.title) : t("Monitor 추가");

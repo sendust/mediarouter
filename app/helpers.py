@@ -158,8 +158,10 @@ def capabilities(ffmpeg):
             rc, _, err = _run(base + ["-frames:v", "2", "-vf", chain, "-f", "null", "-"], timeout=20)
             filters[name] = "" if rc == 0 else _last_line(err)
         cuda = filters["hwupload_cuda+scale_cuda"] == ""
+        rc, out, _ = _run([ffmpeg, "-hide_banner", "-devices"])
+        alsa = rc == 0 and re.search(r"^\s*D\S*\s+alsa\b", out, re.MULTILINE) is not None
         _caps = {"nvenc": nvenc, "nvdec": nvdec, "cuda": cuda,
-                 "hevc_nvenc": hevc, "hevc_bframes": hevc_bf,
+                 "hevc_nvenc": hevc, "hevc_bframes": hevc_bf, "alsa": alsa,
                  "nvenc_error": nvenc_err, "hevc_nvenc_error": hevc_err, "nvdec_error": nvdec_err,
                  "cuda_error": filters["hwupload_cuda+scale_cuda"],
                  "cuda_filters": {k: v == "" for k, v in filters.items()},
@@ -173,6 +175,8 @@ def capabilities(ffmpeg):
         log.log(lvl(hevc), "capabilities: NVENC (hevc_nvenc) %s%s", ok(hevc),
                 f" — {hevc_err}" if hevc_err else "" if hevc_bf else " (no B-frames on this GPU)")
         log.log(lvl(nvdec), "capabilities: NVDEC (hwaccel cuda) %s%s", ok(nvdec), f" — {nvdec_err}" if nvdec_err else "")
+        log.log(lvl(alsa), "capabilities: ALSA input (-f alsa) %s%s", ok(alsa),
+                "" if alsa else " — ffmpeg built without ALSA (needs libasound2-dev at configure time)")
         for k, e in filters.items():
             log.log(lvl(not e), "capabilities: CUDA filter %s %s%s", k, ok(not e), f" — {e}" if e else "")
         if not (nvenc and nvdec and cuda):
@@ -222,3 +226,140 @@ def check_dir_writable(path):
     else:
         log.warning("file output folder %s: NOT writable — %s", p, reason)
     return {"path": p, "ok": ok, "error": reason, "free_bytes": free}
+
+
+# ------------------------------------------------------------ ALSA capture devices / mixer
+def alsa_devices():
+    """Capture PCMs of every sound card, from /proc/asound (no alsa-utils needed).
+    `device` is the ffmpeg -i argument: plughw by card id (stable across reboots, converts format/rate)."""
+    cards = {}
+    try:
+        with open("/proc/asound/cards", encoding="utf-8") as f:
+            for line in f:
+                m = re.match(r"\s*(\d+)\s+\[(\S+)\s*\]:\s*(.*?)\s+-\s+(.*)$", line)
+                if m:
+                    cards[int(m.group(1))] = {"id": m.group(2), "driver": m.group(3), "name": m.group(4).strip()}
+    except OSError:
+        return []
+    out = []
+    try:
+        with open("/proc/asound/pcm", encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        lines = []
+    for line in lines:
+        m = re.match(r"(\d+)-(\d+):\s*(.*?)\s*:\s*(.*?)\s*:(.*)$", line)
+        if not m or "capture" not in m.group(5):
+            continue
+        c, d = int(m.group(1)), int(m.group(2))
+        card = cards.get(c, {"id": str(c), "name": "", "driver": ""})
+        out.append({
+            "card": card["id"], "card_index": c, "card_name": card["name"], "pcm": d, "pcm_name": m.group(3),
+            "device": f"plughw:CARD={card['id']},DEV={d}",
+            "busy": _pcm_busy(c, d),
+        })
+    return out
+
+
+def _pcm_busy(card, pcm):
+    """True when some process has the capture PCM open (sub0/status is 'closed' otherwise)."""
+    try:
+        with open(f"/proc/asound/card{card}/pcm{pcm}c/sub0/status", encoding="utf-8") as f:
+            return f.read().strip() != "closed"
+    except OSError:
+        return False
+
+
+# controls shown in the recording mixer: capture volume/switch/source, plus common (non-directional)
+# controls that clearly belong to the input side (Mic Boost, Line Boost, ...)
+_CAPTURE_NAME = re.compile(r"capture|mic|boost|input|line|adc|digital|record|source", re.IGNORECASE)
+_SEG = r"(?:(Playback|Capture) )?(\d+) \[(\d+)%\](?: \[(-?[\d.]+)dB\])?(?: \[(on|off)\])?"
+
+
+def _amixer(card, *args):
+    if not shutil.which("amixer"):
+        return -1, "", "amixer not found (sudo apt install alsa-utils)"
+    return _run(["amixer", "-c", str(card), *args], timeout=5)
+
+
+def _parse_scontents(text):
+    controls, cur = [], None
+    for line in text.splitlines():
+        m = re.match(r"Simple mixer control '(.*)',(\d+)$", line)
+        if m:
+            cur = {"name": m.group(1), "index": int(m.group(2)), "caps": [], "items": [], "channels": []}
+            controls.append(cur)
+            continue
+        if cur is None:
+            continue
+        s = line.strip()
+        if s.startswith("Capabilities:"):
+            cur["caps"] = s.split(":", 1)[1].split()
+        elif s.startswith("Limits:"):
+            nums = re.findall(r"(?:(Playback|Capture) )?(-?\d+) - (-?\d+)", s)
+            for direction, lo, hi in nums:
+                if direction != "Playback":
+                    cur["min"], cur["max"] = int(lo), int(hi)
+        elif s.startswith("Items:"):
+            cur["items"] = re.findall(r"'([^']*)'", s)
+        elif re.match(r"Item\d+:", s):
+            cur.setdefault("item", (re.findall(r"'([^']*)'", s) or [""])[0])
+        elif ":" in s and not s.startswith(("Playback channels", "Capture channels", "Capabilities")):
+            ch, rest = s.split(":", 1)
+            vol = None
+            for direction, val, pct, db, sw in re.findall(_SEG, rest):
+                if direction != "Playback":
+                    vol = {"name": ch.strip(), "value": int(val), "percent": int(pct),
+                           "db": float(db) if db else None, "on": (sw == "on") if sw else None}
+            if vol is None:
+                sw = re.search(r"Capture \[(on|off)\]", rest)
+                if sw:
+                    vol = {"name": ch.strip(), "value": None, "percent": None, "db": None, "on": sw.group(1) == "on"}
+            if vol:
+                cur["channels"].append(vol)
+    out = []
+    for c in controls:
+        caps = set(c["caps"])
+        cvol = bool(caps & {"cvolume", "cvolume-joined"})
+        csw = bool(caps & {"cswitch", "cswitch-joined", "cswitch-exclusive"})
+        cenum = "cenum" in caps
+        common_vol = bool(caps & {"volume", "volume-joined"}) and _CAPTURE_NAME.search(c["name"])
+        common_enum = "enum" in caps and _CAPTURE_NAME.search(c["name"])
+        if not (cvol or csw or cenum or common_vol or common_enum):
+            continue
+        out.append({
+            "name": c["name"], "index": c["index"], "id": f"{c['name']},{c['index']}",
+            "volume": cvol or bool(common_vol), "capture_dir": cvol,
+            "switch": csw, "enum": cenum or bool(common_enum),
+            "min": c.get("min"), "max": c.get("max"), "items": c["items"], "item": c.get("item"),
+            "channels": c["channels"],
+        })
+    return out
+
+
+def alsa_mixer(card):
+    rc, out, err = _amixer(card, "scontents")
+    if rc != 0:
+        return {"card": card, "controls": [], "error": (err or out).strip().splitlines()[-1] if (err or out).strip() else f"amixer rc={rc}"}
+    return {"card": card, "controls": _parse_scontents(out), "error": ""}
+
+
+def alsa_mixer_set(card, control, kind, value):
+    """kind: volume (raw value, all channels) | switch (bool) | enum (item name)."""
+    ctl = next((c for c in alsa_mixer(card)["controls"] if c["id"] == control), None)
+    if ctl is None:
+        raise ValueError(f"no capture control {control!r} on card {card}")
+    if kind == "volume" and ctl["volume"]:
+        v = max(ctl["min"] or 0, min(ctl["max"] or 0, int(value)))
+        args = ["sset", control] + (["capture"] if ctl["capture_dir"] else []) + [str(v)]
+    elif kind == "switch" and ctl["switch"]:
+        args = ["sset", control, "cap" if value else "nocap"]
+    elif kind == "enum" and ctl["enum"] and value in ctl["items"]:
+        args = ["sset", control, value]
+    else:
+        raise ValueError(f"{control}: cannot set {kind}")
+    rc, out, err = _amixer(card, "--", *args)
+    if rc != 0:
+        raise ValueError((err or out).strip() or f"amixer rc={rc}")
+    log.info("alsa mixer %s '%s' %s = %s", card, control, kind, value)
+    return next((c for c in alsa_mixer(card)["controls"] if c["id"] == control), ctl)

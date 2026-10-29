@@ -264,3 +264,11 @@ a.mtx-open:hover .ext { color: #7fd4ff; }
 .lang-btn { padding: 1px 6px; gap: 0; font-size: 11px; }
 .lang-btn span { padding: 0 4px; color: var(--muted); }
 .lang-btn span.on { color: var(--text); font-weight: 700; }
+.mix-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; max-height: 60vh; overflow: auto; min-width: min(560px, 80vw); }
+.mix-row { display: flex; align-items: center; gap: 10px; padding: 4px 6px; background: var(--panel2); border-radius: 4px; }
+.mix-name { flex: 0 0 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mix-vol { flex: 1 1 auto; min-width: 120px; }
+.mix-fill { flex: 1 1 auto; }
+.mix-val { flex: 0 0 170px; font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+.mix-sw-l { flex: none; white-space: nowrap; }
+.mix-enum { flex: none; }

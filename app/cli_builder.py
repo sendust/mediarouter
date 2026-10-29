@@ -150,6 +150,17 @@ class Builder:
                                   for a in layout]
             self.interlaced = bool(m.get("interlaced"))
 
+        elif kind == "alsa":
+            # audio only: one capture PCM as one N-channel stream (plughw converts rate/format)
+            al = inp.get("alsa", {})
+            ch = max(1, int(al.get("channels") or 2))
+            layout = {1: "mono", 2: "stereo"}.get(ch, f"{ch}c")  # ffmpeg 7+: -ch_layout (no -channels)
+            args = ["-f", "alsa", "-thread_queue_size", "1024",
+                    "-sample_rate", int(al.get("sample_rate") or 48000), "-ch_layout", layout]
+            args += custom_in + ["-i", al.get("device") or "default"]
+            i = self._add_input(args)
+            self.audio_streams = [(f"{i}:a:0", ch)]
+
         elif kind == "testsrc":
             t = inp.get("testsrc", {})
             src = t.get("source") or "testsrc2"

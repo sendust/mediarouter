@@ -190,6 +190,22 @@ const EN = {
   "Monitor 추가": "Add monitor",
   "mediamtx API 에 연결할 수 없습니다: ": "Can't connect to the mediamtx API: ",
   "활성화된 path 가 없습니다. 아래에 직접 입력할 수 있습니다.": "No active paths. You can type them below.",
+
+  // ---- ALSA input / recording mixer
+  "녹음 믹서…": "Recording mixer…",
+  "ALSA 녹음 믹서": "ALSA recording mixer",
+  "변경은 즉시 적용됩니다. 재부팅 후에도 유지하려면 alsa-utils 의 alsa-restore 서비스(종료시 저장)가 동작해야 합니다.":
+    "Changes apply immediately. To keep them across reboots the alsa-restore service from alsa-utils (saves at shutdown) must be running.",
+  " — 사용중": " — in use",
+  "(ALSA 캡처 장치 없음)": "(no ALSA capture devices)",
+  "(없음)": "(missing)",
+  "이 ffmpeg 는 ALSA 입력(-f alsa)을 지원하지 않습니다 — libasound2-dev 설치 후 ffmpeg 재빌드가 필요합니다.":
+    "This ffmpeg has no ALSA input (-f alsa) — rebuild ffmpeg after installing libasound2-dev.",
+  "이 장치는 다른 프로세스가 사용중입니다 — 인코더가 시작되지 않을 수 있습니다.":
+    "This device is in use by another process — the encoder may fail to start.",
+  "불러오는 중…": "Loading…",
+  "이 카드에는 녹음 관련 믹서 컨트롤이 없습니다.": "This card has no recording mixer controls.",
+  "캡처": "Capture",
 };
 
 const I18N = {
