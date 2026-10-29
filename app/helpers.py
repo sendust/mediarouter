@@ -363,3 +363,72 @@ def alsa_mixer_set(card, control, kind, value):
         raise ValueError((err or out).strip() or f"amixer rc={rc}")
     log.info("alsa mixer %s '%s' %s = %s", card, control, kind, value)
     return next((c for c in alsa_mixer(card)["controls"] if c["id"] == control), ctl)
+
+
+# saved mixer state, one alsactl state file per card (alsactl -f: no root needed, unlike
+# /var/lib/alsa/asound.state); restored when the backend starts
+def _state_file(state_dir, card):
+    if not re.fullmatch(r"[\w-]+", card or ""):
+        raise ValueError(f"invalid card id {card!r}")
+    return os.path.join(state_dir, f"{card}.state")
+
+
+def _alsactl(*args):
+    if not shutil.which("alsactl"):
+        return -1, "", "alsactl not found (sudo apt install alsa-utils)"
+    return _run(["alsactl", *args], timeout=10)
+
+
+def alsa_saved_state(state_dir, card):
+    """{saved, saved_at, dirty}: dirty = current mixer differs from the saved file."""
+    path = _state_file(state_dir, card)
+    if not os.path.exists(path):
+        return {"saved": False, "saved_at": None, "dirty": True}
+    fd, tmp = tempfile.mkstemp(prefix=".cur-", suffix=".state", dir=state_dir)
+    os.close(fd)
+    try:
+        rc, _, _ = _alsactl("-f", tmp, "store", card)
+        with open(path, encoding="utf-8", errors="replace") as a, open(tmp, encoding="utf-8", errors="replace") as b:
+            dirty = rc != 0 or a.read() != b.read()
+    finally:
+        os.unlink(tmp)
+    return {"saved": True, "saved_at": os.path.getmtime(path), "dirty": dirty}
+
+
+def alsa_mixer_save(state_dir, card):
+    path = _state_file(state_dir, card)
+    os.makedirs(state_dir, exist_ok=True)
+    rc, out, err = _alsactl("-f", path, "store", card)
+    if rc != 0:
+        raise ValueError((err or out).strip() or f"alsactl rc={rc}")
+    log.info("alsa mixer %s saved to %s", card, path)
+    return alsa_saved_state(state_dir, card)
+
+
+def alsa_mixer_restore(state_dir, card, reason="revert"):
+    path = _state_file(state_dir, card)
+    if not os.path.exists(path):
+        raise ValueError(f"no saved mixer state for {card}")
+    rc, out, err = _alsactl("-f", path, "restore", card)
+    if rc != 0:
+        raise ValueError((err or out).strip() or f"alsactl rc={rc}")
+    log.info("alsa mixer %s restored from %s (%s)", card, path, reason)
+    return alsa_saved_state(state_dir, card)
+
+
+def alsa_restore_all(state_dir):
+    """Backend start: put every card with a saved state back to it (cards not present are skipped)."""
+    try:
+        files = sorted(f for f in os.listdir(state_dir) if f.endswith(".state") and not f.startswith("."))
+    except OSError:
+        return
+    present = {d["card"] for d in alsa_devices()}
+    for f in files:
+        card = f[:-len(".state")]
+        if card not in present:
+            log.warning("alsa mixer %s: saved state but no such card now — skipped", card)
+            continue
+        try:
+            alsa_mixer_restore(state_dir, card, "backend start")
+        except ValueError as e:
+            log.warning("alsa mixer %s restore failed: %s", card, e)

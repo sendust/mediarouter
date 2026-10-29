@@ -272,3 +272,7 @@ a.mtx-open:hover .ext { color: #7fd4ff; }
 .mix-val { flex: 0 0 170px; font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
 .mix-sw-l { flex: none; white-space: nowrap; }
 .mix-enum { flex: none; }
+.mix-save-row { align-items: center; gap: 8px; }
+#mix-state.ok { color: var(--ok); }
+#mix-state.warn { color: var(--warn); }
+.mix-list .bad { color: var(--err); }

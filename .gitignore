@@ -6,6 +6,9 @@ __pycache__/
 # runtime state: edited from the UI on each host (see config.example.json)
 config.json
 config.json.tmp
+config.json.bak
+# saved ALSA recording mixer state (alsactl, per card)
+alsa/
 
 # backend log, console log, per-encoder fflog
 logs/

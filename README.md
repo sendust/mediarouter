@@ -22,6 +22,8 @@ DeckLink ─ ffmpeg ─▶ mediamtx (sdiN_va12, sdiN_a34 …) ─ ffmpeg ─▶ 
   - 입력: DeckLink (장치/포맷/채널수), mediamtx path (여러 path 의 오디오를 합쳐서 사용 가능), ALSA (오디오 전용), testsrc (lavfi), custom
   - ALSA 입력: 모든 사운드카드의 캡처 장치 선택 (`plughw:CARD=<id>,DEV=<n>`), 기본 출력 = mediamtx path `alsa_<card>` 에 stereo opus 1 stream.
     "녹음 믹서…" 대화창에서 카드별 capture volume / capture switch / input source 조절 (`amixer`).
+    "저장" 하면 `alsa/<card>.state` (`alsactl -f … store`) 에 기록하고, 백엔드가 시작될 때마다 (재부팅 후 포함) 복원.
+    ALSA 입력은 wallclock timestamp 지터를 없애기 위해 `asetpts=N/SR/TB` 로 sample 수 기준 timestamp 를 다시 만듦.
     필요: ALSA 를 포함해 빌드한 ffmpeg (`libasound2-dev`), `alsa-utils`, 백엔드 사용자가 `audio` 그룹 멤버
   - 오디오: 스테레오 출력마다 L, R 채널을 임의의 입력/채널에서 선택, loudnorm (I / LRA / TP)
   - NVDEC (GPU 디코딩) — mediamtx / custom 입력. 프레임을 GPU 메모리에 두고 CUDA 필터 → NVENC 로 바로 전달 (CPU 필터/libx264 사용시 자동 hwdownload)
@@ -47,13 +49,93 @@ DeckLink ─ ffmpeg ─▶ mediamtx (sdiN_va12, sdiN_a34 …) ─ ffmpeg ─▶ 
 ## 요구사항
 
 - Linux, Python 3.10+
-- ffmpeg — `--enable-decklink`, NVENC/CUDA 사용시 `--enable-nvenc --enable-cuda-nvcc` 등
+- ffmpeg — DeckLink / NVENC / NVDEC / CUDA filter / ALSA 를 포함해 직접 빌드 (아래 [ffmpeg 빌드](#ffmpeg-빌드))
 - [mediamtx](https://github.com/bluenviron/mediamtx) — `mediamtx.yml` 에서 `api: true` (API :9997), RTSP :8554, WebRTC :8889
 - (선택) Blackmagic Desktop Video 드라이버, NVIDIA 드라이버
 
 > **Quadro P2200 (Pascal) 주의**: NVIDIA 드라이버는 580 branch 까지만 Pascal 지원 (590+ 미지원, `-open` 모듈 불가).
 > ffmpeg 은 nv-codec-headers `sdk/13.0` 으로 빌드해야 함 (master / 13.1 은 드라이버 610+ 필요 →
 > `Driver does not support the required nvenc API version. Required: 13.1 Found: 13.0`).
+
+## ffmpeg 빌드
+
+배포판 ffmpeg 에는 DeckLink 가 없고 NVENC/CUDA filter 도 빠져 있는 경우가 많아 소스에서 빌드합니다.
+아래는 nagoya1 (Ubuntu, Quadro P2200, CUDA 12.4) 에서 실제 사용중인 구성입니다.
+
+### 1. 의존 패키지 / SDK
+
+```bash
+sudo apt install build-essential nasm pkg-config git \
+  libx264-dev libx265-dev libvpx-dev libaom-dev libsvtav1enc-dev libopus-dev libmp3lame-dev \
+  libass-dev libfreetype-dev libfribidi-dev libharfbuzz-dev \
+  libsrt-openssl-dev librist-dev libssl-dev libdrm-dev libva-dev \
+  libasound2-dev alsa-utils \
+  nvidia-cuda-toolkit            # nvcc: CUDA filter (scale_cuda, bwdif_cuda, yadif_cuda) 컴파일용
+
+# NVENC/NVDEC 헤더 — 드라이버 버전에 맞는 branch (580 드라이버 = sdk/13.0)
+git clone https://github.com/FFmpeg/nv-codec-headers.git -b sdk/13.0
+cd nv-codec-headers && sudo make install PREFIX=/usr/local && cd ..
+
+# DeckLink SDK — Blackmagic 사이트에서 "Desktop Video SDK" 다운로드 후 Linux/include 를 사용
+#   (Desktop Video 드라이버 버전과 같은 계열의 SDK. 여기서는 ~/SDK/Linux/include)
+sudo usermod -aG audio $USER   # ALSA 장치 / 믹서 접근 (재로그인 필요)
+```
+
+### 2. configure / make
+
+```bash
+git clone https://git.ffmpeg.org/ffmpeg.git && cd ffmpeg
+./configure --prefix=/usr/local \
+  --enable-gpl --enable-nonfree --enable-version3 \
+  --enable-libx264 --enable-libx265 --enable-libvpx --enable-libaom --enable-libsvtav1 \
+  --enable-libopus --enable-libmp3lame \
+  --enable-libass --enable-libfreetype --enable-libfribidi --enable-libharfbuzz \
+  --enable-libsrt --enable-librist --enable-openssl \
+  --enable-libdrm --enable-vaapi \
+  --enable-decklink \
+  --enable-ffnvcodec --enable-cuda-nvcc \
+  --nvccflags='-gencode arch=compute_61,code=sm_61 -O2' \
+  --extra-cflags='-I/home/sendust/SDK/Linux/include -I/usr/local/include' \
+  --extra-cxxflags='-I/home/sendust/SDK/Linux/include' \
+  --extra-ldflags='-L/usr/lib/x86_64-linux-gnu'
+make -j$(nproc)
+sudo make install        # /usr/local/bin/ffmpeg, ffprobe (실행중인 인코더는 재시작 후 새 바이너리 사용)
+```
+
+ALSA 는 별도 옵션 없이 `libasound2-dev` 가 설치되어 있으면 자동으로 켜집니다.
+configure 결과의 `Enabled indevs:` 에 `alsa`, `decklink` 가 있는지 확인하세요.
+
+### 3. 옵션 설명
+
+| 옵션 | 용도 (mediarouter 에서) |
+|---|---|
+| `--enable-gpl --enable-version3` | libx264 / libx265 등 GPL 라이브러리 사용 |
+| `--enable-nonfree` | `--enable-decklink`, `--enable-cuda-nvcc` 에 필요 (NVENC/NVDEC 자체는 불필요). 결과 바이너리는 재배포 불가 |
+| `--enable-decklink` | DeckLink SDI 입력 (`-f decklink`). `--extra-cflags/--extra-cxxflags` 에 DeckLink SDK `include` 경로 필요. 실행시 Desktop Video 드라이버 (`libDeckLinkAPI.so`) 필요 |
+| `--enable-ffnvcodec` | NVENC (`h264_nvenc`, `hevc_nvenc`, `av1_nvenc`) + NVDEC (`-hwaccel cuda`, `*_cuvid`). nv-codec-headers 를 찾아야 함 — 드라이버가 지원하는 API 버전의 branch 로 설치 (P2200 / 580 드라이버 = `sdk/13.0`) |
+| `--enable-cuda-nvcc` | CUDA filter 컴파일: `hwupload_cuda`, `scale_cuda`, `bwdif_cuda`, `yadif_cuda` (GPU deinterlace / resize). nvcc (CUDA toolkit) 필요 |
+| `--nvccflags='-gencode arch=compute_61,code=sm_61'` | CUDA filter 를 GPU 세대에 맞게 컴파일. Pascal (P2200, GTX 10xx) = `61`, Turing = `75`, Ampere = `86`, Ada = `89` |
+| (자동) ALSA | `libasound2-dev` 가 있으면 ALSA 입력 (`-f alsa`) 활성. 이 ffmpeg 버전에서는 채널 지정이 `-ch_layout` (구 `-channels` 아님) |
+| `--enable-libx264` | CPU H.264 인코더 (`libx264`) — NVENC 를 쓸 수 없을 때 helper 의 fallback |
+| `--enable-libx265 --enable-libvpx --enable-libaom --enable-libsvtav1` | HEVC / VP8·9 / AV1 CPU 인코더 (CLI 직접 편집용) |
+| `--enable-libopus` | Opus 오디오 — WebRTC 모니터 (브라우저) 가 재생할 수 있는 오디오 코덱. mediamtx 송출 기본값 |
+| `--enable-libmp3lame` | MP3 오디오 |
+| `--enable-libsrt --enable-librist --enable-openssl` | SRT / RIST 출력, `rtmps://`·`https://` 출력 (TLS) |
+| `--enable-libass --enable-libfreetype --enable-libfribidi --enable-libharfbuzz` | `subtitles` / `drawtext` filter (자막·텍스트 오버레이) |
+| `--enable-libdrm --enable-vaapi` | VAAPI (Intel iGPU) 가속 — 선택 |
+
+### 4. 확인
+
+```bash
+ffmpeg -hide_banner -devices  | grep -E 'alsa|decklink'
+ffmpeg -hide_banner -encoders | grep -E 'nvenc|libopus|libx264'
+ffmpeg -hide_banner -filters  | grep -E 'scale_cuda|bwdif_cuda|yadif_cuda'
+ffmpeg -hide_banner -f lavfi -i testsrc2=d=1 -c:v h264_nvenc -f null -       # NVENC 실제 동작
+```
+
+백엔드도 시작할 때 같은 항목을 실제로 실행해 확인하고 결과를 로그에 남깁니다
+(`capabilities: NVENC … OK`, `NVDEC … OK`, `CUDA filter … OK`, `ALSA input … OK`).
+사용할 수 없는 기능은 encoder helper 에서 경고와 함께 비활성화되거나 libx264 / CPU filter 로 대체됩니다.
 
 ## 실행
 

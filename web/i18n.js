@@ -194,8 +194,6 @@ const EN = {
   // ---- ALSA input / recording mixer
   "녹음 믹서…": "Recording mixer…",
   "ALSA 녹음 믹서": "ALSA recording mixer",
-  "변경은 즉시 적용됩니다. 재부팅 후에도 유지하려면 alsa-utils 의 alsa-restore 서비스(종료시 저장)가 동작해야 합니다.":
-    "Changes apply immediately. To keep them across reboots the alsa-restore service from alsa-utils (saves at shutdown) must be running.",
   " — 사용중": " — in use",
   "(ALSA 캡처 장치 없음)": "(no ALSA capture devices)",
   "(없음)": "(missing)",
@@ -206,6 +204,14 @@ const EN = {
   "불러오는 중…": "Loading…",
   "이 카드에는 녹음 관련 믹서 컨트롤이 없습니다.": "This card has no recording mixer controls.",
   "캡처": "Capture",
+  "저장된 값으로 되돌리기": "Revert to saved",
+  "변경은 즉시 적용됩니다. 저장하면 백엔드가 시작될 때 (재부팅 후 포함) 저장된 값으로 복원합니다.":
+    "Changes apply immediately. Saved settings are restored whenever the backend starts (including after a reboot).",
+  "저장된 값 없음 — 재부팅하면 현재 설정이 유지되지 않을 수 있습니다": "Nothing saved — the current settings may not survive a reboot",
+  "저장 안 된 변경 있음 (저장: {0})": "Unsaved changes (saved: {0})",
+  "저장됨 ({0})": "Saved ({0})",
+  "믹서 설정 저장됨 ({0})": "Mixer settings saved ({0})",
+  "저장된 믹서 설정으로 되돌림 ({0})": "Reverted to saved mixer settings ({0})",
 };
 
 const I18N = {

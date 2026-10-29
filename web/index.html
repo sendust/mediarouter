@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MEDIAROUTER by sendust</title>
-<link rel="stylesheet" href="/static/style.css?v=42">
+<link rel="stylesheet" href="/static/style.css?v=43">
 </head>
 <body>
 <header class="topbar">
@@ -388,17 +388,22 @@
       <button type="button" class="btn ghost sm" id="mix-refresh">새로고침</button>
     </div>
     <div id="mix-list" class="mix-list"></div>
-    <div class="muted small">변경은 즉시 적용됩니다. 재부팅 후에도 유지하려면 alsa-utils 의 alsa-restore 서비스(종료시 저장)가 동작해야 합니다.</div>
+    <div class="row mix-save-row">
+      <button type="button" class="btn primary sm" id="mix-save">저장</button>
+      <button type="button" class="btn ghost sm" id="mix-revert">저장된 값으로 되돌리기</button>
+      <span id="mix-state" class="small"></span>
+    </div>
+    <div class="muted small">변경은 즉시 적용됩니다. 저장하면 백엔드가 시작될 때 (재부팅 후 포함) 저장된 값으로 복원합니다.</div>
     <div class="dlg-foot">
       <button value="cancel" class="btn primary">닫기</button>
     </div>
   </form>
 </dialog>
 
-<script src="/static/i18n.js?v=42"></script>
-<script src="/static/reader.js?v=42"></script>
-<script src="/static/meter.js?v=42"></script>
-<script src="/static/app.js?v=42"></script>
-<script src="/static/helper.js?v=42"></script>
+<script src="/static/i18n.js?v=43"></script>
+<script src="/static/reader.js?v=43"></script>
+<script src="/static/meter.js?v=43"></script>
+<script src="/static/app.js?v=43"></script>
+<script src="/static/helper.js?v=43"></script>
 </body>
 </html>

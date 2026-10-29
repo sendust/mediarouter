@@ -952,6 +952,8 @@ const MixerDialog = {
       $("#mix-refresh").addEventListener("click", () => this.load());
       $("#mix-list").addEventListener("input", (e) => this.onInput(e, false));
       $("#mix-list").addEventListener("change", (e) => this.onInput(e, true));
+      $("#mix-save").addEventListener("click", () => this.store("save"));
+      $("#mix-revert").addEventListener("click", () => this.store("revert"));
     }
     // every card that has a capture device (several ALSA cards are fine)
     const cards = [...new Map((EncoderHelper.alsa?.devices || []).map((d) => [d.card, d.card_name])).entries()];
@@ -968,6 +970,7 @@ const MixerDialog = {
     box.innerHTML = `<div class="muted small">${t("불러오는 중…")}</div>`;
     let d;
     try { d = await api("GET", `/api/helper/alsa/mixer?card=${encodeURIComponent(this.card)}`); } catch (e) { d = { controls: [], error: e.message }; }
+    this.showState(d.state);
     if (d.error) { box.innerHTML = `<div class="bad small">${esc(d.error)}</div>`; return; }
     if (!d.controls.length) { box.innerHTML = `<div class="muted small">${t("이 카드에는 녹음 관련 믹서 컨트롤이 없습니다.")}</div>`; return; }
     box.innerHTML = d.controls.map((c) => `<div class="mix-row" data-id="${esc(c.id)}"></div>`).join("");
@@ -1023,6 +1026,34 @@ const MixerDialog = {
       // while dragging only update the readout, so the slider under the pointer isn't re-created
       if (kind === "volume" && !final) { const v = row && $(".mix-val", row); if (v) v.textContent = this.valText(c); }
       else this.renderRow(c);
+      clearTimeout(this.stateTimer);
+      this.stateTimer = setTimeout(() => this.refreshState(), 400);
+    } catch (e) { toast(e.message, true); }
+  },
+
+  /* saved state of the card: "saved at … / unsaved changes" */
+  showState(st) {
+    this.state = st || null;
+    const el = $("#mix-state");
+    $("#mix-revert").disabled = !st?.saved;
+    $("#mix-save").disabled = !this.card;
+    if (!st) { el.textContent = ""; el.className = "small"; return; }
+    const at = st.saved_at ? new Date(st.saved_at * 1000).toLocaleString() : "";
+    el.className = `small ${st.saved && !st.dirty ? "ok" : "warn"}`;
+    el.textContent = !st.saved ? t("저장된 값 없음 — 재부팅하면 현재 설정이 유지되지 않을 수 있습니다")
+      : st.dirty ? t("저장 안 된 변경 있음 (저장: {0})", at) : t("저장됨 ({0})", at);
+  },
+
+  async refreshState() {
+    if (!this.card) return;
+    try { this.showState(await api("GET", `/api/helper/alsa/mixer/state?card=${encodeURIComponent(this.card)}`)); } catch (_) { /* keep */ }
+  },
+
+  async store(action) {
+    try {
+      this.showState(await api("POST", `/api/helper/alsa/mixer/${action}`, { card: this.card }));
+      if (action === "revert") await this.load();
+      toast(action === "save" ? t("믹서 설정 저장됨 ({0})", this.card) : t("저장된 믹서 설정으로 되돌림 ({0})", this.card));
     } catch (e) { toast(e.message, true); }
   },
 };

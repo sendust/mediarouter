@@ -159,7 +159,11 @@ class Builder:
                     "-sample_rate", int(al.get("sample_rate") or 48000), "-ch_layout", layout]
             args += custom_in + ["-i", al.get("device") or "default"]
             i = self._add_input(args)
-            self.audio_streams = [(f"{i}:a:0", ch)]
+            # alsa stamps packets with the wall clock as they arrive: the jitter makes timestamps
+            # step backwards ("Queue input is backward in time" / "Non-monotonic DTS" several
+            # times a second); count samples instead
+            self.fc.append(f"[{i}:a:0]asetpts=N/SR/TB[alsa{i}]")
+            self.audio_streams = [(f"alsa{i}", ch)]
 
         elif kind == "testsrc":
             t = inp.get("testsrc", {})
@@ -357,7 +361,7 @@ class Builder:
             return None, []
         if codec == "copy":
             spec, _ = self._flat(int(a.get("left", 0)))
-            return spec, ["-c:a", "copy"]
+            return (spec if ":" in spec else f"[{spec}]"), ["-c:a", "copy"]
         lbl = self.audio_stereo(int(a.get("left", 0)), int(a.get("right", 1)), "aout")
         return lbl, self._codec_args(a)
 

@@ -23,6 +23,7 @@ from .sysinfo import SysInfo
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEB_DIR = os.path.join(BASE_DIR, "web")
+ALSA_STATE_DIR = os.path.join(BASE_DIR, "alsa")  # saved recording mixer state per card
 CONFIG_PATH = os.environ.get("MEDIAROUTER_CONFIG", os.path.join(BASE_DIR, "config.json"))
 
 store = ConfigStore(CONFIG_PATH)
@@ -51,6 +52,7 @@ async def lifespan(_app):
     mtx.start()
     ffreport.start()
     subtitler.start()
+    threading.Thread(target=helpers.alsa_restore_all, args=(ALSA_STATE_DIR,), name="alsa-restore", daemon=True).start()
     manager.autostart()
     yield
     log.info("mediarouter backend shutting down")
@@ -250,7 +252,26 @@ def helper_alsa():
 
 @app.get("/api/helper/alsa/mixer")
 def helper_alsa_mixer(card: str):
-    return helpers.alsa_mixer(card)
+    return {**helpers.alsa_mixer(card), "state": helper_alsa_state(card)}
+
+
+@app.get("/api/helper/alsa/mixer/state")
+def helper_alsa_state(card: str):
+    try:
+        return helpers.alsa_saved_state(ALSA_STATE_DIR, card)
+    except (ValueError, OSError) as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/helper/alsa/mixer/{action}")
+def helper_alsa_mixer_store(action: str, data: dict = Body(...)):
+    fn = {"save": helpers.alsa_mixer_save, "revert": helpers.alsa_mixer_restore}.get(action)
+    if fn is None:
+        raise HTTPException(404, "unknown action")
+    try:
+        return fn(ALSA_STATE_DIR, data.get("card", ""))
+    except (ValueError, OSError) as e:
+        raise HTTPException(400, str(e))
 
 
 @app.post("/api/helper/alsa/mixer")
