@@ -430,6 +430,7 @@ const EncoderHelper = {
     $("#v-zl").checked = live;
     $("#a-codec").value = live || inType === "alsa" ? "opus" : "aac";
     $("#a-br").value = "128k";
+    $("#a-opus-ld").checked = inType === "alsa";
     if (inType === "alsa") {
       // audio only: one stereo opus stream on a mediamtx path
       $("#om-path").value = this.alsaPath();
@@ -582,7 +583,12 @@ const EncoderHelper = {
           audio_channels: Number($("#ts-ach").value), sine_freq: Number($("#ts-freq").value),
         },
         custom: { args: $("#cu-args").value, layout: $("#cu-layout").value },
-        alsa: { device: $("#al-device").value, channels: Number($("#al-channels").value), sample_rate: Number($("#al-sr").value) },
+        alsa: {
+          device: $("#al-device").value, channels: Number($("#al-channels").value), sample_rate: Number($("#al-sr").value),
+          // for the shared low-latency device (backend: app/alsa_lowlat.py)
+          card: this.alsaDev()?.card ?? this.alsaSaved?.card, pcm: this.alsaDev()?.pcm ?? this.alsaSaved?.pcm,
+          hw_channels: this.alsaDev()?.hw_channels ?? this.alsaSaved?.hw_channels,
+        },
       },
       audio_layout: this.layout,
       sink: { type: outType, base: $("#op-base").value, pairs: $$("#op-pairs input:checked").map((i) => Number(i.value)),
@@ -601,7 +607,7 @@ const EncoderHelper = {
       },
       audio: {
         codec: $("#a-codec").value, left: Number($("#a-left").value || 0), right: Number($("#a-right").value || 1),
-        bitrate: $("#a-br").value, sample_rate: Number($("#a-sr").value),
+        bitrate: $("#a-br").value, sample_rate: Number($("#a-sr").value), opus_lowdelay: $("#a-opus-ld").checked,
         loudnorm: { enabled: $("#a-ln").checked, I: $("#a-ln-i").value, LRA: $("#a-ln-lra").value, TP: $("#a-ln-tp").value },
       },
       custom: { global: $("#c-global").value, input: $("#c-input").value, output: $("#c-output").value },
@@ -635,6 +641,7 @@ const EncoderHelper = {
     $("#mx-transport").value = m.transport || "udp";
     $("#mx-interlaced").checked = !!m.interlaced;
     const al = i.alsa || {};
+    this.alsaSaved = al;   // card/pcm/hw_channels when the device is missing or busy now
     if (al.device) {
       if (![...$("#al-device").options].some((o) => o.value === al.device)) {
         $("#al-device").insertAdjacentHTML("beforeend", `<option value="${esc(al.device)}">${esc(al.device)} ${t("(없음)")}</option>`);
@@ -697,6 +704,7 @@ const EncoderHelper = {
     $("#a-codec").value = a.codec || "aac";
     $("#a-br").value = a.bitrate || "128k";
     $("#a-sr").value = String(a.sample_rate || 48000);
+    $("#a-opus-ld").checked = !!a.opus_lowdelay;
     const ln = a.loudnorm || {};
     $("#a-ln").checked = !!ln.enabled;
     $("#a-ln-i").value = ln.I ?? -23;
@@ -728,6 +736,7 @@ const EncoderHelper = {
     const outType = radio("out_type");
     $$(".in-pane").forEach((p) => { p.hidden = p.dataset.pane !== inType; });
     $$(".out-pane").forEach((p) => { p.hidden = p.dataset.pane !== outType; });
+    $(".a-opus-ld").hidden = $("#a-codec").value !== "opus";
     // ALSA is audio only: no video encoder
     $("#v-codec").disabled = inType === "alsa";
     if (inType === "alsa") {
@@ -735,7 +744,12 @@ const EncoderHelper = {
       const d = this.alsaDev();
       $("#al-note").textContent = this.alsa?.alsa === false
         ? t("이 ffmpeg 는 ALSA 입력(-f alsa)을 지원하지 않습니다 — libasound2-dev 설치 후 ffmpeg 재빌드가 필요합니다.")
-        : d?.busy ? t("이 장치는 다른 프로세스가 사용중입니다 — 인코더가 시작되지 않을 수 있습니다.") : "";
+        : [
+          this.meta?.alsa_low_latency !== false ? t("저지연 공유 캡처 (5 ms 패킷) — 같은 장치를 여러 인코더가 함께 사용할 수 있습니다.") : "",
+          d?.busy ? t("현재 사용중인 장치입니다 — mediarouter 의 다른 ALSA 인코더라면 함께 쓸 수 있지만, 다른 프로그램이 점유중이면 시작되지 않습니다.") : "",
+          d?.hw_channels && Number($("#al-channels").value) > d.hw_channels[1]
+            ? t("이 장치는 최대 {0}채널입니다 — 나머지 채널은 복제됩니다.", d.hw_channels[1]) : "",
+        ].filter(Boolean).join(" ");
       $("#al-mixer").disabled = !d;
     }
     // NVDEC only for compressed inputs, and only when the video is decoded at all

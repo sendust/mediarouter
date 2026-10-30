@@ -20,6 +20,7 @@ from collections import deque
 
 import psutil
 
+from . import alsa_lowlat
 from .fflog import FFLog, compile_patterns
 from .logger import get_logger
 
@@ -290,6 +291,8 @@ class Encoder:
         self.argv = build_argv(self.cfg.get("cli", ""), ff["path"], rep["loglevel"])
         env = dict(os.environ)
         env[ENV_MARK] = self.id
+        if alsa_lowlat.PCM + ":" in self.cfg.get("cli", ""):
+            env.update(alsa_lowlat.env(self.app_cfg("_base_dir"), self.app_cfg("alsa")))
         proc = subprocess.Popen(
             self.argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             env=env, start_new_session=True, bufsize=0,

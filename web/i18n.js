@@ -205,6 +205,14 @@ const EN = {
   "이 카드에는 녹음 관련 믹서 컨트롤이 없습니다.": "This card has no recording mixer controls.",
   "캡처": "Capture",
   "저장된 값으로 되돌리기": "Revert to saved",
+  "-application lowdelay -frame_duration 10: CELT 전용 저지연 모드, 10 ms 프레임 (기본 20 ms). 인코더 지연이 약 10~15 ms 줄어듭니다.":
+    "-application lowdelay -frame_duration 10: CELT-only low-delay mode, 10 ms frames (default 20 ms). About 10~15 ms less encoder delay.",
+  "Opus 저지연 (lowdelay · 10 ms 프레임)": "Opus low delay (lowdelay · 10 ms frames)",
+  "저지연 공유 캡처 (5 ms 패킷) — 같은 장치를 여러 인코더가 함께 사용할 수 있습니다.":
+    "Low-latency shared capture (5 ms packets) — several encoders can use the same device.",
+  "현재 사용중인 장치입니다 — mediarouter 의 다른 ALSA 인코더라면 함께 쓸 수 있지만, 다른 프로그램이 점유중이면 시작되지 않습니다.":
+    "Device in use — fine if it is another mediarouter ALSA encoder, but it won't start if another program holds it.",
+  "이 장치는 최대 {0}채널입니다 — 나머지 채널은 복제됩니다.": "This device has at most {0} channels — the rest are duplicated.",
   "변경은 즉시 적용됩니다. 저장하면 백엔드가 시작될 때 (재부팅 후 포함) 저장된 값으로 복원합니다.":
     "Changes apply immediately. Saved settings are restored whenever the backend starts (including after a reboot).",
   "저장된 값 없음 — 재부팅하면 현재 설정이 유지되지 않을 수 있습니다": "Nothing saved — the current settings may not survive a reboot",

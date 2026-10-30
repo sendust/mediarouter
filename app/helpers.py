@@ -253,12 +253,31 @@ def alsa_devices():
             continue
         c, d = int(m.group(1)), int(m.group(2))
         card = cards.get(c, {"id": str(c), "name": "", "driver": ""})
+        busy = _pcm_busy(c, d)
         out.append({
             "card": card["id"], "card_index": c, "card_name": card["name"], "pcm": d, "pcm_name": m.group(3),
             "device": f"plughw:CARD={card['id']},DEV={d}",
-            "busy": _pcm_busy(c, d),
+            "busy": busy, "hw_channels": _hw_channels(card["id"], d, busy),
         })
     return out
+
+
+_hw_ch_cache = {}
+
+
+def _hw_channels(card, pcm, busy):
+    """[min, max] capture channels the hardware supports (arecord --dump-hw-params), cached.
+    A busy device cannot be probed: last known value, or None."""
+    key = (card, pcm)
+    if key in _hw_ch_cache or busy or not shutil.which("arecord"):
+        return _hw_ch_cache.get(key)
+    _, _, err = _run(["timeout", "3", "arecord", "-D", f"hw:CARD={card},DEV={pcm}", "--dump-hw-params",
+                      "-d", "1", "-f", "S16_LE", "-r", "48000", "/dev/null"], timeout=6)
+    m = re.search(r"^CHANNELS:\s*(?:\[(\d+)\s+(\d+)\]|(\d+))", err, re.MULTILINE)
+    if m:
+        lo, hi = (int(m.group(1)), int(m.group(2))) if m.group(1) else (int(m.group(3)),) * 2
+        _hw_ch_cache[key] = [lo, hi]
+    return _hw_ch_cache.get(key)
 
 
 def _pcm_busy(card, pcm):

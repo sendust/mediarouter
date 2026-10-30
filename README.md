@@ -24,6 +24,10 @@ DeckLink ─ ffmpeg ─▶ mediamtx (sdiN_va12, sdiN_a34 …) ─ ffmpeg ─▶ 
     "녹음 믹서…" 대화창에서 카드별 capture volume / capture switch / input source 조절 (`amixer`).
     "저장" 하면 `alsa/<card>.state` (`alsactl -f … store`) 에 기록하고, 백엔드가 시작될 때마다 (재부팅 후 포함) 복원.
     ALSA 입력은 wallclock timestamp 지터를 없애기 위해 `asetpts=N/SR/TB` 로 sample 수 기준 timestamp 를 다시 만듦.
+    저지연: ffmpeg alsa 입력은 기본으로 85 ms 단위로 읽으므로 (최대 버퍼 요청 → HDA 는 4096 frame period),
+    프로젝트 전용 ALSA 설정 `alsa/lowlat.conf` (`ALSA_CONFIG_PATH` 로 ALSA 인코더에만 적용, 시스템 설정 변경 없음) 의
+    `mr_lowlat:CARD=…,DEV=…,CH=…,RATE=…` (plug → dsnoop → hw, period 240 / buffer 1920 frame = 5 ms / 40 ms) 로 캡처.
+    dsnoop 이라 같은 장치를 여러 인코더가 동시에 사용 가능. Opus 는 `-application lowdelay -frame_duration 10` 옵션 (ALSA 입력 기본 켜짐).
     필요: ALSA 를 포함해 빌드한 ffmpeg (`libasound2-dev`), `alsa-utils`, 백엔드 사용자가 `audio` 그룹 멤버
   - 오디오: 스테레오 출력마다 L, R 채널을 임의의 입력/채널에서 선택, loudnorm (I / LRA / TP)
   - NVDEC (GPU 디코딩) — mediamtx / custom 입력. 프레임을 GPU 메모리에 두고 CUDA 필터 → NVENC 로 바로 전달 (CPU 필터/libx264 사용시 자동 hwdownload)
@@ -252,6 +256,7 @@ journalctl -u mediarouter -f              # 콘솔 출력 (logs/backend.log 에�
 - `ffreport_watchdog` — `dir`, `loglevel`, `max_size_mb`, `backup_count`, `check_interval_sec`, `tail_lines`,
   `restart_on_patterns` (정규식 목록; fflog 에 매칭되면 재시작. 예: `"Connection refused"`).
   fflog 크기는 rotate 만 하고 재시작 사유가 되지 않습니다.
+- `alsa` — `low_latency` (ALSA 입력을 저지연 공유 장치로, 기본 true), `period_frames` (240), `buffer_frames` (1920)
 - `recording` — `segment_sec` (파일 출력 segment 길이, 기본 3600), `default_dir` (폴더 탐색 시작 위치, 비우면 백엔드 사용자 home), `srt` (segment 파일마다 시각 자막 .srt 생성, 기본 true).
   segment 길이는 helper 가 CLI 를 만들 때 들어가므로, 바꾼 뒤에는 인코더를 helper 에서 다시 저장해야 적용됩니다
 - `logging` — `dir`, `level`, `max_size_mb`, `backup_count`, `ring_size`

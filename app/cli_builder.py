@@ -6,6 +6,8 @@ runs the stored text (the spec is kept so the helper can be reopened).
 import re
 import shlex
 
+from . import alsa_lowlat
+
 # (label, size, rate, interlaced) -- interlaced sources are generated at field
 # rate and woven with tinterlace=4 (skill §11)
 VIDEO_STANDARDS = {
@@ -154,10 +156,16 @@ class Builder:
             # audio only: one capture PCM as one N-channel stream (plughw converts rate/format)
             al = inp.get("alsa", {})
             ch = max(1, int(al.get("channels") or 2))
+            rate = int(al.get("sample_rate") or 48000)
             layout = {1: "mono", 2: "stereo"}.get(ch, f"{ch}c")  # ffmpeg 7+: -ch_layout (no -channels)
-            args = ["-f", "alsa", "-thread_queue_size", "1024",
-                    "-sample_rate", int(al.get("sample_rate") or 48000), "-ch_layout", layout]
-            args += custom_in + ["-i", al.get("device") or "default"]
+            dev = al.get("device") or "default"
+            if self.app.get("alsa_low_latency", True) and al.get("card") and al.get("pcm") is not None:
+                # shared low-latency capture (5 ms packets instead of 85 ms); the hardware runs at the
+                # nearest channel count it supports, plug converts to what this encoder asks for
+                lo, hi = al.get("hw_channels") or [2, 2]
+                dev = alsa_lowlat.device(al["card"], al["pcm"], min(max(ch, lo), hi), rate)
+            args = ["-f", "alsa", "-thread_queue_size", "1024", "-sample_rate", rate, "-ch_layout", layout]
+            args += custom_in + ["-i", dev]
             i = self._add_input(args)
             # alsa stamps packets with the wall clock as they arrive: the jitter makes timestamps
             # step backwards ("Queue input is backward in time" / "Non-monotonic DTS" several
@@ -299,6 +307,9 @@ class Builder:
     def _codec_args(self, a, opus_default=False):
         codec = a.get("codec") or ("opus" if opus_default else "aac")
         args = list(AUDIO_CODECS.get(codec, ["-c:a", codec]))
+        if codec == "opus" and a.get("opus_lowdelay"):
+            # CELT-only low-delay mode and 10 ms frames (default 20 ms): ~10-15 ms less encoder delay
+            args += ["-application", "lowdelay", "-frame_duration", "10"]
         args += ["-b:a", a.get("bitrate") or "128k"]
         args += ["-ar", str(self._sample_rate(a))]
         return args

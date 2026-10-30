@@ -70,7 +70,8 @@ def _app_ctx():
     m = store.section("mediamtx")
     return {"rtsp_url": m["rtsp_url"], "rtsp_transport": m.get("rtsp_transport", "udp"),
             "udp_buffer_size": m.get("udp_buffer_size", 4194304),
-            "segment_sec": store.section("recording").get("segment_sec", 3600)}
+            "segment_sec": store.section("recording").get("segment_sec", 3600),
+            "alsa_low_latency": bool(store.section("alsa").get("low_latency", True))}
 
 
 def _enc_or_404(enc_id):
@@ -228,6 +229,7 @@ def helper_meta():
         "lavfi_sources": helpers.lavfi_sources(store.section("ffmpeg")["path"]) or LAVFI_VIDEO_SOURCES,
         "caps": helpers.capabilities(store.section("ffmpeg")["path"]),
         "rtsp_transport": store.section("mediamtx").get("rtsp_transport", "udp"),
+        "alsa_low_latency": bool(store.section("alsa").get("low_latency", True)),
         "recording": store.section("recording"),
     }
 

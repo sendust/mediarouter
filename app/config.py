@@ -46,6 +46,11 @@ DEFAULTS = {
         "default_dir": "",     # folder browser start (empty = backend user's home)
         "srt": True,           # write a 1 s timestamp .srt next to every new segment file
     },
+    "alsa": {
+        "low_latency": True,   # ALSA inputs via the shared low-latency dsnoop device (app/alsa_lowlat.py)
+        "period_frames": 240,  # capture packet size (240 @ 48 kHz = 5 ms; ffmpeg's own default is 85 ms)
+        "buffer_frames": 1920, # ALSA ring buffer (40 ms): headroom before an overrun if ffmpeg stalls
+    },
     "logging": {
         "dir": "logs",
         "level": "INFO",
