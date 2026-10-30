@@ -704,7 +704,7 @@ const EncoderHelper = {
     $("#a-codec").value = a.codec || "aac";
     $("#a-br").value = a.bitrate || "128k";
     $("#a-sr").value = String(a.sample_rate || 48000);
-    $("#a-opus-ld").checked = !!a.opus_lowdelay;
+    $("#a-opus-ld").checked = a.opus_lowdelay ?? (i.type === "alsa");   // specs saved before the option: on for ALSA
     const ln = a.loudnorm || {};
     $("#a-ln").checked = !!ln.enabled;
     $("#a-ln-i").value = ln.I ?? -23;
