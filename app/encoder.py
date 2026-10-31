@@ -148,6 +148,9 @@ class Encoder:
         self._last_advance = 0.0
         self._first_progress = False
         self._advance_key = None
+        self._frame_last = 0         # video frame count from -progress (0 = no video output)
+        self._frame_advance = 0.0    # when it last increased
+        self._video_stalled = False
         self._pattern_hit = None
         self._fail_streak = 0
         self._hold_until = None
@@ -314,6 +317,9 @@ class Encoder:
         self.slow_since = None
         self._first_progress = False
         self._advance_key = None
+        self._frame_last = 0
+        self._frame_advance = 0.0
+        self._video_stalled = False
         self._pattern_hit = None
         self.last_error = ""
         t0 = time.time()
@@ -375,6 +381,9 @@ class Encoder:
                 reason = f"speed watchdog: {self.speed_now:.2f}x < {float(wd['speed_min']):.2f}x"
                 log.error("[%s] [SPEED] restarting: %.2fx below %.2fx for %.0fs", self.title,
                           self.speed_now, float(wd["speed_min"]), float(wd["speed_window_sec"]))
+                break
+            if self._check_video_stall(now, in_grace, wd):
+                reason = f"video stall: no video frames for {now - self._frame_advance:.1f}s"
                 break
             if self.next_sched and now >= self.next_sched:
                 reason = "scheduled restart"
@@ -438,6 +447,13 @@ class Encoder:
                     self._speed_samples.popleft()
             except ValueError:
                 pass  # out_time_us=N/A before the first packet
+            try:
+                frame = int(block.get("frame") or 0)
+            except ValueError:
+                frame = 0
+            if frame > self._frame_last:   # stays 0 for audio-only outputs, so they are never watched
+                self._frame_last = frame
+                self._frame_advance = time.time()
             key = (block.get("out_time_us"), block.get("total_size"), block.get("frame"))
             if key != self._advance_key:
                 self._advance_key = key
@@ -445,6 +461,27 @@ class Encoder:
                 self._first_progress = True
             block = {}
         pipe.close()
+
+    def _check_video_stall(self, now, in_grace, wd):
+        """Video frame count frozen while output time keeps advancing (e.g. every video frame
+        dropped after a timestamp jump while audio carries on). Only armed once the output has
+        produced video, so audio-only encoders are never affected. Returns True to restart."""
+        limit = float(wd.get("video_stall_sec", 10) or 0)
+        if limit <= 0 or not self._frame_last or in_grace:
+            return False
+        frozen = now - self._frame_advance
+        if frozen <= limit or now - self._last_advance > min(5.0, limit):
+            if self._video_stalled and frozen <= limit:
+                log.info("[%s] [VIDEO STALL] video frames flowing again", self.title)
+                self._video_stalled = False
+            return False   # either fine, or everything stopped (the progress watchdog handles that)
+        if not self._video_stalled:
+            self._video_stalled = True
+            auto = self.cfg.get("auto_restart", True)
+            log.error("[%s] [VIDEO STALL] no video frames for %.1fs while output time advances (frame=%d)%s",
+                      self.title, frozen, self._frame_last, "" if auto else "; auto-restart disabled, not restarting")
+            self.fflog.mark(f"video stall: frame count stuck at {self._frame_last} for {frozen:.1f}s")
+        return bool(self.cfg.get("auto_restart", True))
 
     def _check_speed(self, now, t0, wd):
         """Realtime check over the last speed_window_sec (ffmpeg's own speed= is a

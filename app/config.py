@@ -31,6 +31,7 @@ DEFAULTS = {
         "speed_min": 0.95,
         "speed_window_sec": 30.0,
         "pipe_buffer_bytes": 524288,
+        "video_stall_sec": 10.0,   # restart when the video frame count stops while output time advances (0 = off)
     },
     "ffreport_watchdog": {
         "dir": "logs/fflog",

@@ -253,6 +253,10 @@ journalctl -u mediarouter -f              # 콘솔 출력 (logs/backend.log 에�
   - `pipe_buffer_bytes` — ffmpeg stdout/stderr 파이프 크기 (F_SETPIPE_SZ)
   - `speed_check`, `speed_min`, `speed_window_sec` — 최근 `speed_window_sec` 동안의 실제 처리속도(out_time 증가량 / 경과시간)가
     `speed_min` 미만이면 카드에 SLOW 표시 + 경고 로그. 인코더 카드의 "속도저하시 재시작" 을 켜면 재시작까지 함
+  - `video_stall_sec` (기본 10, 0 = 끔) — 출력 시간(out_time)은 계속 증가하는데 video frame 수가 이 시간동안 멈추면
+    `[VIDEO STALL]` 로그 후 재시작 ("오류시 자동재시작" 이 켜진 인코더만; 꺼져 있으면 경고만).
+    출력에 video 가 한 번이라도 나온 뒤에만 감시하므로 audio-only 인코더에는 적용되지 않습니다.
+    (예: 타임스탬프 점프로 ffmpeg 가 video 프레임을 전부 drop 하고 audio 만 기록 → segment 가 나뉘지 않는 경우)
 - `ffreport_watchdog` — `dir`, `loglevel`, `max_size_mb`, `backup_count`, `check_interval_sec`, `tail_lines`,
   `restart_on_patterns` (정규식 목록; fflog 에 매칭되면 재시작. 예: `"Connection refused"`).
   fflog 크기는 rotate 만 하고 재시작 사유가 되지 않습니다.
