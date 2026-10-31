@@ -229,7 +229,7 @@ def check_dir_writable(path):
 
 
 # ------------------------------------------------------------ ALSA capture devices / mixer
-def alsa_devices():
+def alsa_devices(probe=True):
     """Capture PCMs of every sound card, from /proc/asound (no alsa-utils needed).
     `device` is the ffmpeg -i argument: plughw by card id (stable across reboots, converts format/rate)."""
     cards = {}
@@ -257,7 +257,7 @@ def alsa_devices():
         out.append({
             "card": card["id"], "card_index": c, "card_name": card["name"], "pcm": d, "pcm_name": m.group(3),
             "device": f"plughw:CARD={card['id']},DEV={d}",
-            "busy": busy, "hw_channels": _hw_channels(card["id"], d, busy),
+            "busy": busy, "hw_channels": _hw_channels(card["id"], d, busy) if probe else None,
         })
     return out
 
@@ -441,7 +441,7 @@ def alsa_restore_all(state_dir):
         files = sorted(f for f in os.listdir(state_dir) if f.endswith(".state") and not f.startswith("."))
     except OSError:
         return
-    present = {d["card"] for d in alsa_devices()}
+    present = {d["card"] for d in alsa_devices(probe=False)}   # no arecord probe: it would hold the device while ALSA encoders autostart
     for f in files:
         card = f[:-len(".state")]
         if card not in present:
