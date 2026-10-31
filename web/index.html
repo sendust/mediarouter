@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MEDIAROUTER by sendust</title>
-<link rel="stylesheet" href="/static/style.css?v=45">
+<link rel="stylesheet" href="/static/style.css?v=46">
 </head>
 <body>
 <header class="topbar">
@@ -328,6 +328,32 @@
             1-pass 실시간 모드라 약 3초 lookahead 지연이 추가되고, 모든 오디오 출력(pair path 포함)에 적용됩니다.</div>
         </div>
         <div class="muted small" id="a-note"></div>
+        <details class="pan-help">
+          <summary class="small">pan 필터 문법 (채널 지정 · 합산 · 정규화 합산)</summary>
+          <div class="hint">
+            <div>형식: <code>pan=&lt;출력 레이아웃&gt;|&lt;출력 채널&gt;=&lt;식&gt;|…</code></div>
+            <ul>
+              <li>출력 레이아웃: mono, stereo 또는 채널 수 (예: 4c). 출력 채널은 c0, c1, …</li>
+              <li>입력 채널 cN 은 0부터 셉니다 — 위 L/R 목록의 ch1 = c0, ch2 = c1.</li>
+              <li>L/R 이 서로 다른 스트림이면 amerge 로 합친 뒤 pan 을 적용하므로, 두 번째 스트림의 채널 번호는 첫 스트림 채널 수만큼 뒤로 밀립니다.</li>
+              <li>'=' 는 적은 게인 그대로, '&lt;' 는 게인 합이 1 이 되도록 자동으로 줄여 클리핑을 막습니다.</li>
+              <li>게인: 2 = +6 dB, 0.707 = -3 dB, 0.5 = -6 dB, -1 = 위상 반전.</li>
+            </ul>
+            <table class="pan-tbl">
+              <tr><td><code>pan=stereo|c0=c2|c1=c3</code></td><td>지정: 입력 채널을 출력 채널에 그대로 연결 (이 helper 의 L/R 선택이 만드는 형식)</td></tr>
+              <tr><td><code>pan=stereo|c0=c1|c1=c0</code></td><td>L/R 교체</td></tr>
+              <tr><td><code>pan=stereo|c0=c0|c1=c0</code></td><td>한 채널을 L, R 양쪽으로 복제 (dual mono)</td></tr>
+              <tr><td><code>pan=mono|c0=c0+c1</code></td><td>합산: 그대로 더함 — 같은 신호면 +6 dB, 클리핑 위험</td></tr>
+              <tr><td><code>pan=mono|c0&lt;c0+c1</code></td><td>정규화 합산: 각 채널 0.5 배로 자동 조정, 클리핑 없음</td></tr>
+              <tr><td><code>pan=mono|c0=0.5*c0+0.5*c1</code></td><td>게인을 직접 적은 합산 (위 정규화 합산과 같은 결과)</td></tr>
+              <tr><td><code>pan=stereo|c0=0.5*c0|c1=0.5*c1</code></td><td>볼륨 -6 dB</td></tr>
+              <tr><td><code>pan=stereo|c0=c0+0.707*c2|c1=c1+0.707*c2</code></td><td>센터(c2)를 -3 dB 로 L, R 에 섞기</td></tr>
+              <tr><td><code>pan=stereo|c0&lt;c0+0.707*c2+0.707*c4|c1&lt;c1+0.707*c2+0.707*c5</code></td><td>5.1 (L R C LFE Ls Rs) → 스테레오 다운믹스, LFE 제외</td></tr>
+              <tr><td><code>pan=stereo|c0=c0|c1=-1*c1</code></td><td>R 위상 반전</td></tr>
+            </table>
+            <div>CLI 에서 '|' 는 셸 파이프이므로 필터 전체를 작은따옴표 '…' 로 감싸야 합니다. 직접 수정하려면 "직접 편집한 CLI 유지" 를 체크하고 CLI 의 pan=… 부분을 고치세요.</div>
+          </div>
+        </details>
       </fieldset>
     </div>
 
@@ -403,10 +429,10 @@
   </form>
 </dialog>
 
-<script src="/static/i18n.js?v=45"></script>
-<script src="/static/reader.js?v=45"></script>
-<script src="/static/meter.js?v=45"></script>
-<script src="/static/app.js?v=45"></script>
-<script src="/static/helper.js?v=45"></script>
+<script src="/static/i18n.js?v=46"></script>
+<script src="/static/reader.js?v=46"></script>
+<script src="/static/meter.js?v=46"></script>
+<script src="/static/app.js?v=46"></script>
+<script src="/static/helper.js?v=46"></script>
 </body>
 </html>

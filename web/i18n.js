@@ -3,6 +3,26 @@
    t("… {0} …", x) for strings built in JS, I18N.apply() for static HTML text/title/placeholder. */
 
 const EN = {
+  // ---- pan filter help
+  "pan=<출력 레이아웃>|<출력 채널>=<식>|…": "pan=<output layout>|<output channel>=<expression>|…",
+  "pan 필터 문법 (채널 지정 · 합산 · 정규화 합산)": "pan filter syntax (assign · sum · normalized sum)",
+  "형식:": "Format:",
+  "출력 레이아웃: mono, stereo 또는 채널 수 (예: 4c). 출력 채널은 c0, c1, …": "Output layout: mono, stereo or a channel count (e.g. 4c). Output channels are c0, c1, …",
+  "입력 채널 cN 은 0부터 셉니다 — 위 L/R 목록의 ch1 = c0, ch2 = c1.": "Input channels cN count from 0 — ch1 in the L/R lists above = c0, ch2 = c1.",
+  "L/R 이 서로 다른 스트림이면 amerge 로 합친 뒤 pan 을 적용하므로, 두 번째 스트림의 채널 번호는 첫 스트림 채널 수만큼 뒤로 밀립니다.": "If L and R come from different streams they are joined with amerge before pan, so the second stream's channel numbers are shifted by the first stream's channel count.",
+  "'=' 는 적은 게인 그대로, '<' 는 게인 합이 1 이 되도록 자동으로 줄여 클리핑을 막습니다.": "'=' uses the gains as written; '<' scales them down so they sum to 1, preventing clipping.",
+  "게인: 2 = +6 dB, 0.707 = -3 dB, 0.5 = -6 dB, -1 = 위상 반전.": "Gain: 2 = +6 dB, 0.707 = -3 dB, 0.5 = -6 dB, -1 = polarity invert.",
+  "지정: 입력 채널을 출력 채널에 그대로 연결 (이 helper 의 L/R 선택이 만드는 형식)": "Assign: route input channels straight to output channels (what this helper's L/R selection generates)",
+  "L/R 교체": "Swap L/R",
+  "한 채널을 L, R 양쪽으로 복제 (dual mono)": "Copy one channel to both L and R (dual mono)",
+  "합산: 그대로 더함 — 같은 신호면 +6 dB, 클리핑 위험": "Sum: plain addition — +6 dB for identical signals, may clip",
+  "정규화 합산: 각 채널 0.5 배로 자동 조정, 클리핑 없음": "Normalized sum: each channel scaled to 0.5 automatically, no clipping",
+  "게인을 직접 적은 합산 (위 정규화 합산과 같은 결과)": "Sum with explicit gains (same result as the normalized sum above)",
+  "볼륨 -6 dB": "Volume -6 dB",
+  "센터(c2)를 -3 dB 로 L, R 에 섞기": "Mix centre (c2) into L and R at -3 dB",
+  "5.1 (L R C LFE Ls Rs) → 스테레오 다운믹스, LFE 제외": "5.1 (L R C LFE Ls Rs) → stereo downmix, LFE dropped",
+  "R 위상 반전": "Invert R polarity",
+  "CLI 에서 '|' 는 셸 파이프이므로 필터 전체를 작은따옴표 '…' 로 감싸야 합니다. 직접 수정하려면 \"직접 편집한 CLI 유지\" 를 체크하고 CLI 의 pan=… 부분을 고치세요.": "In the CLI '|' is a shell pipe, so quote the whole filter in single quotes '…'. To edit by hand, tick \"Keep hand-edited CLI\" and change the pan=… part of the CLI.",
   // ---- index.html
   "오디오 레벨미터를 사용하려면 화면을 한 번 클릭하세요": "Click anywhere to enable the audio level meters",
   "장치": "Device",

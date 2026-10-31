@@ -276,3 +276,9 @@ a.mtx-open:hover .ext { color: #7fd4ff; }
 #mix-state.ok { color: var(--ok); }
 #mix-state.warn { color: var(--warn); }
 .mix-list .bad { color: var(--err); }
+.pan-help { margin-top: 4px; }
+.pan-help .hint ul { margin: 4px 0; padding-left: 18px; }
+.pan-help .hint code { font-family: var(--mono); color: var(--text); white-space: nowrap; }
+.pan-tbl { border-collapse: collapse; margin: 4px 0; width: 100%; }
+.pan-tbl td { padding: 2px 6px 2px 0; vertical-align: top; border-top: 1px solid var(--border); }
+.pan-tbl td:first-child { width: 1%; }
