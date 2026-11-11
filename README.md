@@ -10,6 +10,26 @@ DeckLink ─ ffmpeg ─▶ mediamtx (sdiN_va12, sdiN_a34 …) ─ ffmpeg ─▶ 
                           └─ WebRTC (WHEP) ─▶ 브라우저 모니터 카드 (영상 + 오디오 레벨미터)
 ```
 
+## 스크린샷
+
+(testsrc 데모 인코더로 촬영. 호스트명/IP 는 가림)
+
+**대시보드** — 인코더 카드, 모니터 카드(WebRTC 영상 + L/R 레벨미터), 시스템/GPU/네트워크 상태, mediamtx path 목록
+
+![dashboard](docs/screenshots/dashboard.png)
+
+**Encoder helper** — 입력/출력/코덱을 고르면 ffmpeg CLI 생성 (testsrc → mediamtx 4 path)
+
+![helper](docs/screenshots/helper.png)
+
+**모니터 카드** — path 별 레벨미터 (-60~0 dBFS, peak hold), 라벨 클릭시 청취
+
+![monitor](docs/screenshots/monitor.png)
+
+**English UI** — 우측 상단 KO / EN 전환
+
+![dashboard (English)](docs/screenshots/dashboard_en.png)
+
 ## 주요 기능
 
 - **인코더 카드** — 인코더 1개 = ffmpeg 프로세스 1개 (OS 스레드 1개가 감시)
