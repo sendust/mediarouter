@@ -153,6 +153,16 @@ class ConfigStore:
         with self._lock:
             return copy.deepcopy(self.data[name])
 
+    def set_value(self, key, value):
+        """Set one dotted key inside a settings section, e.g. "encoder_watchdog.video_stall_sec"."""
+        parts = key.split(".")
+        with self._lock:
+            cur = self.data
+            for part in parts[:-1]:
+                cur = cur[part]
+            cur[parts[-1]] = value
+            self.save()
+
     # ---- list helpers (encoders / monitors) ----
     def items(self, kind):
         with self._lock:

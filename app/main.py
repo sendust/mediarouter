@@ -4,14 +4,16 @@ import json
 import os
 import threading
 import time
+import urllib.parse
 from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import Body, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import helpers, status
+from .cli import Cli, CliError, client_script, html_page
 from .cli_builder import DECKLINK_FORMATS, LAVFI_VIDEO_SOURCES, VIDEO_STANDARDS, build_cli, suggest_pair_paths
 from .config import ConfigStore
 from .fflog import FFReportWatchdog
@@ -99,11 +101,46 @@ def encoders_payload(cached=True):
 def api_status(format: str = "json"):
     """Backend health + system + encoder summary for external monitoring.
     ?format=text returns a short plain-text version (e.g. for a Telegram message)."""
-    doc = status.build(sysinfo.snapshot, mtx.snapshot, encoders_payload(), store.items("monitors"),
-                       BASE_DIR, STARTED_AT)
+    doc = status_doc()
     if format == "text":
         return PlainTextResponse(status.to_text(doc))
     return doc
+
+
+def status_doc():
+    return status.build(sysinfo.snapshot, mtx.snapshot, encoders_payload(), store.items("monitors"),
+                        BASE_DIR, STARTED_AT)
+
+
+# --------------------------------------------------------------------- cli
+cli = Cli(manager, store, mtx, sysinfo, status_doc)
+
+
+def _base_url(request):
+    return str(request.base_url).rstrip("/")
+
+
+@app.get("/cli")
+def cli_client(request: Request):
+    """`curl http://host:8080/cli | bash` gets the bash client; a browser gets usage instructions."""
+    if "text/html" in request.headers.get("accept", ""):
+        return HTMLResponse(html_page(_base_url(request)))
+    return PlainTextResponse(client_script(_base_url(request)), media_type="text/x-shellscript")
+
+
+@app.post("/cli/run")
+async def cli_run(request: Request):
+    form = urllib.parse.parse_qs((await request.body()).decode("utf-8", "replace"), keep_blank_values=True)
+    line = (form.get("cmd") or [""])[0]
+    value = form["value"][0] if "value" in form else None
+    words = line.split()
+    if words and words[0].lower() in ("set", "add", "delete", "del", "rm", "move", "mv"):
+        log.info("cli: %s", line if value is None else f"{line} <{len(value)} chars>")
+    try:
+        out = await asyncio.to_thread(cli.run, line, value)
+    except CliError as e:
+        return PlainTextResponse(f"error: {e}\n", status_code=400)
+    return PlainTextResponse(out.rstrip("\n") + "\n" if out else "")
 
 
 # ------------------------------------------------------------------ pages

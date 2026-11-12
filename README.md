@@ -246,6 +246,7 @@ journalctl -u mediarouter -f              # 콘솔 출력 (logs/backend.log 에�
 | `app/mediamtx.py` | mediamtx API poller (path, codec 정보, 입력 bitrate, publisher/reader 의 remote 주소) |
 | `app/sysinfo.py` | hostname, IP, CPU, RAM, NIC TX/RX, ffmpeg 프로세스 수 |
 | `app/logger.py` | 콘솔 + `logs/backend.log` (rotate) + 최근 1000건 ring buffer. UI 조작(GET 외 요청)으로 남는 로그 끝에 `(from <접속 IP>)` |
+| `app/cli.py` | 터미널용 텍스트 명령 셸 (`curl .../cli \| bash`) — 명령 해석 + bash 클라이언트 |
 | `app/status.py` | `/api/status` 상태 요약 / health 판정 / text 출력 |
 | `app/config.py` | config.json 로드/저장 (atomic write, 누락 키는 기본값으로 채워 기록 — 이전 파일은 `config.json.bak`, 기록 실패시 경고만 남기고 기본값으로 동작) |
 | `web/index.html`, `app.js` | UI (vanilla JS), 인코더/모니터 카드, 시스템, 로그 |
@@ -300,6 +301,7 @@ journalctl -u mediarouter -f              # 콘솔 출력 (logs/backend.log 에�
 | `GET /api/helper/*` | helper 용 (DeckLink 장치/포맷, mediamtx path, probe, CLI build) |
 | `GET /api/status` (`?format=text`) | **외부 모니터링용 상태 요약** (아래 참고) |
 | `GET /api/system`, `GET /api/logs`, `GET /events` (SSE) | 상태 |
+| `GET /cli`, `POST /cli/run` (`cmd=`, `value=`) | 터미널 CLI (아래 참고) |
 
 인증은 없습니다. 사내망에서만 사용하세요.
 
@@ -340,6 +342,38 @@ encoders total 3, running 3
 ```
 
 감시 측에서는 주기적으로 조회해 `health` 가 바뀔 때만 알리는 방식을 권장합니다 (상태가 계속 같으면 메시지 생략).
+
+## 터미널 CLI
+
+GUI 를 쓸 수 없는 환경(ssh 등)에서 인코더 상태 확인 / 설정 변경용. 터미널에서:
+
+```
+curl -s http://<host>:8080/cli | bash                          # 대화형 (처음에 help 표시)
+curl -s http://<host>:8080/cli | bash -s -- get status all     # 명령 하나 실행 후 종료 (스크립트, cron)
+curl -s --data-urlencode 'cmd=set 1 restart' http://<host>:8080/cli/run   # bash 없이 직접 호출
+```
+
+브라우저로 `/cli` 에 접속하면 위 실행 방법과 명령 목록을 안내하는 페이지가 나옵니다.
+인코더/모니터는 목록 번호 (`list encoders` 의 `#`, 대시보드 카드 순서) 또는 id 로 지정합니다.
+
+| 명령 | |
+|---|---|
+| `list encoders` / `list monitors` / `list paths` | 목록 (번호 포함) |
+| `detail N`, `detail monitor N` | 상세 (`key : value`) |
+| `get status [all]`, `get status N` | 상태 요약 / 인코더 상태 |
+| `get N <key>` | 값 하나 (`get 1 state`, `get 1 cli`, `get 1 scheduled_restart.time`) |
+| `get log N [lines]`, `get logs [lines]` | ffmpeg 로그 / backend 로그 |
+| `get system`, `get config [section[.key]]` | 시스템 정보 / 전역 설정 |
+| `set N <key> <value>` | title, comment, cli, autostart, auto_restart, speed_restart, `scheduled_restart.*` |
+| `set N start\|stop\|restart\|clearlog` | 제어 (`N` 에 `all` 가능) |
+| `set monitor N <key> <value>` | title, enabled, muted, paths (쉼표 구분) |
+| `set config <section.key> <value>` | 전역 설정 (server / logging 은 backend 재시작 후 적용) |
+| `add encoder [title]`, `delete N yes`, `move N M` | 추가 / 삭제 / 순서 |
+| `edit N` | `$EDITOR` 로 ffmpeg 명령줄 편집 (대화형 모드) |
+
+값은 따옴표 없이 줄 끝까지 (`set 1 title DeckLink 1 → 송출`), bool 은 on/off. 변경은 GUI 와 같은 경로로 저장되고
+backend 로그에 `cli: ... (from <IP>)` 로 남습니다. ffmpeg helper (인코더 마법사) 는 CLI 로 제공하지 않습니다.
+명령 기록은 `~/.mediarouter_cli_history`.
 
 ## 동작 메모
 
