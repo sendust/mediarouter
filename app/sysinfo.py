@@ -37,28 +37,104 @@ def _num(v):
         return None  # "[N/A]" / "[Not Supported]"
 
 
-def _gpus(smi):
-    """NVIDIA GPUs via nvidia-smi: utilization (gpu / NVENC / NVDEC), temperature, power, VRAM."""
-    r = subprocess.run([smi, f"--query-gpu={_GPU_QUERY}", "--format=csv,noheader,nounits"],
-                       capture_output=True, text=True, timeout=3)
-    if r.returncode != 0:
-        raise RuntimeError((r.stderr or r.stdout).strip() or f"rc={r.returncode}")
-    out = []
-    for line in r.stdout.strip().splitlines():
-        vals = [v.strip() for v in line.split(",")]
-        if len(vals) != len(_GPU_FIELDS):
-            continue
-        g = dict(zip(_GPU_FIELDS, vals))
-        for k in _GPU_FIELDS[2:]:
-            g[k] = _num(g[k])
+def _parse_gpu_line(line):
+    vals = [v.strip() for v in line.split(",")]
+    if len(vals) != len(_GPU_FIELDS):
+        return None
+    g = dict(zip(_GPU_FIELDS, vals))
+    for k in _GPU_FIELDS[2:]:
+        g[k] = _num(g[k])
+    try:
         g["index"] = int(g["index"])
-        out.append(g)
-    return out
+    except ValueError:
+        return None
+    return g
+
+
+class _GpuLoop:
+    """One resident `nvidia-smi --query-gpu ... -lms N` process instead of spawning nvidia-smi
+    every tick (each spawn re-initializes NVML: ~18 ms CPU; the loop costs ~1 ms per sample).
+    A reader thread parses its CSV lines; GPUs not reported for a while are dropped."""
+
+    def __init__(self, smi, period):
+        self.smi = smi
+        self.period = period
+        self.proc = None
+        self._lock = threading.Lock()
+        self._gpus = {}        # index -> (ts, dict)
+        self._last_text = ""   # last non-CSV line (error message)
+
+    def alive(self):
+        return self.proc is not None and self.proc.poll() is None
+
+    def start(self):
+        self.stop()
+        with self._lock:
+            self._gpus.clear()
+            self._last_text = ""
+        self.proc = subprocess.Popen(
+            [self.smi, f"--query-gpu={_GPU_QUERY}", "--format=csv,noheader,nounits",
+             f"-lms={int(self.period * 1000)}"],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, bufsize=1)
+        threading.Thread(target=self._read, args=(self.proc,), name="nvidia-smi", daemon=True).start()
+
+    def _read(self, proc):
+        for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            g = _parse_gpu_line(line)
+            with self._lock:
+                if g is None:
+                    self._last_text = line
+                else:
+                    self._gpus[g["index"]] = (time.monotonic(), g)
+
+    def snapshot(self):
+        cutoff = time.monotonic() - 3 * self.period - 2
+        with self._lock:
+            return [g for ts, g in sorted(self._gpus.values(), key=lambda x: x[1]["index"]) if ts >= cutoff]
+
+    def error(self):
+        rc = self.proc.poll() if self.proc else None
+        with self._lock:
+            return self._last_text or f"rc={rc}"
+
+    def stop(self):
+        p, self.proc = self.proc, None
+        if p and p.poll() is None:
+            p.terminate()
+            try:
+                p.wait(2)
+            except subprocess.TimeoutExpired:
+                p.kill()
+
+
+def _count_ffmpeg():
+    """Number of processes whose name starts with "ffmpeg". Reads only /proc/<pid>/comm
+    (psutil.process_iter parses /proc/<pid>/stat and, for long names, cmdline: ~8x slower)."""
+    n = 0
+    try:
+        it = os.scandir("/proc")
+    except OSError:
+        return 0
+    with it:
+        for e in it:
+            if not e.name.isdigit():
+                continue
+            try:
+                with open(f"/proc/{e.name}/comm", "rb") as f:
+                    if f.read(6) == b"ffmpeg":
+                        n += 1
+            except OSError:
+                pass  # process exited
+    return n
 
 
 class SysInfo(threading.Thread):
-    GPU_PERIOD = 2.0   # nvidia-smi is a process spawn: every other tick is plenty
-    GPU_RETRY = 60.0   # after a failure (driver reload etc.)
+    GPU_PERIOD = 2.0   # nvidia-smi loop interval (seconds)
+    GPU_RETRY = 60.0   # restart delay after the loop process dies (driver reload etc.)
 
     def __init__(self):
         super().__init__(name="sysinfo", daemon=True)
@@ -72,26 +148,38 @@ class SysInfo(threading.Thread):
         self.snapshot = dict(self.static)
         self._prev_net = None
         self._prev_ts = None
-        self._smi = shutil.which("nvidia-smi")  # nvidia systems only; otherwise no GPU section
+        smi = shutil.which("nvidia-smi")  # nvidia systems only; otherwise no GPU section
+        self._gpu = _GpuLoop(smi, self.GPU_PERIOD) if smi else None
         self._gpus = []
         self._gpu_next = 0.0
         self._gpu_err = None
+        self._gpu_started = False
 
     def _collect_gpus(self, now):
-        if not self._smi or now < self._gpu_next:
+        loop = self._gpu
+        if loop is None:
             return
-        try:
-            self._gpus = _gpus(self._smi)
-            self._gpu_next = now + self.GPU_PERIOD
-            if self._gpu_err:
-                log.info("nvidia-smi OK again")
-            self._gpu_err = None
-        except Exception as e:
-            self._gpus = []
+        if self._gpu_started and not loop.alive():
+            err = loop.error()
+            loop.stop()
+            self._gpu_started = False
             self._gpu_next = now + self.GPU_RETRY
-            if str(e) != self._gpu_err:
-                log.warning("nvidia-smi failed: %s (retry in %.0fs)", e, self.GPU_RETRY)
-            self._gpu_err = str(e)
+            if err != self._gpu_err:
+                log.warning("nvidia-smi failed: %s (retry in %.0fs)", err, self.GPU_RETRY)
+            self._gpu_err = err
+        if not self._gpu_started and now >= self._gpu_next:
+            try:
+                loop.start()
+                self._gpu_started = True
+            except OSError as e:
+                self._gpu_next = now + self.GPU_RETRY
+                if str(e) != self._gpu_err:
+                    log.warning("nvidia-smi failed: %s (retry in %.0fs)", e, self.GPU_RETRY)
+                self._gpu_err = str(e)
+        self._gpus = loop.snapshot() if self._gpu_started else []
+        if self._gpus and self._gpu_err:
+            log.info("nvidia-smi OK again")
+            self._gpu_err = None
 
     def collect(self):
         now = time.time()
@@ -114,10 +202,7 @@ class SysInfo(threading.Thread):
             nics.append({"name": name, "ips": ips, "speed_mbps": st.speed, "rx_bps": rx, "tx_bps": tx})
         self._prev_net, self._prev_ts = counters, now
 
-        ff = 0
-        for p in psutil.process_iter(["name"]):
-            if (p.info["name"] or "").startswith("ffmpeg"):
-                ff += 1
+        ff = _count_ffmpeg()
         self._collect_gpus(now)
         vm = psutil.virtual_memory()
         snap = dict(self.static)
@@ -144,3 +229,5 @@ class SysInfo(threading.Thread):
 
     def stop(self):
         self._stop.set()
+        if self._gpu:
+            self._gpu.stop()
