@@ -135,6 +135,7 @@ def _count_ffmpeg():
 class SysInfo(threading.Thread):
     GPU_PERIOD = 2.0   # nvidia-smi loop interval (seconds)
     GPU_RETRY = 60.0   # restart delay after the loop process dies (driver reload etc.)
+    FFMPEG_PERIOD = 5.0  # ffmpeg process count interval: a full /proc scan is ~85% of a collect()
 
     def __init__(self):
         super().__init__(name="sysinfo", daemon=True)
@@ -154,6 +155,8 @@ class SysInfo(threading.Thread):
         self._gpu_next = 0.0
         self._gpu_err = None
         self._gpu_started = False
+        self._ffmpeg_count = None
+        self._ffmpeg_next = 0.0
 
     def _collect_gpus(self, now):
         loop = self._gpu
@@ -202,7 +205,9 @@ class SysInfo(threading.Thread):
             nics.append({"name": name, "ips": ips, "speed_mbps": st.speed, "rx_bps": rx, "tx_bps": tx})
         self._prev_net, self._prev_ts = counters, now
 
-        ff = _count_ffmpeg()
+        if now >= self._ffmpeg_next:
+            self._ffmpeg_count = _count_ffmpeg()
+            self._ffmpeg_next = now + self.FFMPEG_PERIOD
         self._collect_gpus(now)
         vm = psutil.virtual_memory()
         snap = dict(self.static)
@@ -210,7 +215,7 @@ class SysInfo(threading.Thread):
             "time": time.strftime("%Y/%m/%d %H:%M.%S"),
             "cpu_percent": psutil.cpu_percent(None),
             "load": os.getloadavg(),
-            "ffmpeg_count": ff,
+            "ffmpeg_count": self._ffmpeg_count,
             "mem_total": vm.total,
             "mem_free": vm.free,
             "mem_available": vm.available,
